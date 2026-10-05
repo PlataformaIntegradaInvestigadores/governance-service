@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [develop]
+  pull_request:
+    branches: [develop, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  branch-name:
+    if: github.event_name == 'pull_request'
+    uses: PlataformaIntegradaInvestigadores/.github/.github/workflows/branch-name.yml@main
+
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: python -m pip install -r requirements-dev.txt
+      - run: python -m ruff check .
+      - run: python -m black --check .
+      - run: python -m pytest --cov=app --cov-report=term-missing --cov-report=xml --junitxml=report.xml
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: quality-results
+          path: |
+            report.xml
+            coverage.xml
+      - run: docker compose config --quiet
+      - run: docker build -t governance-service:${{ github.sha }} .
+

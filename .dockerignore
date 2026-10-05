@@ -1,0 +1,15 @@
+.git
+.venv
+.venv311
+.python-runtime
+.uv-cache
+__pycache__
+.pytest_cache
+.ruff_cache
+.env
+.env.*
+AGENTS.md
+CLAUDE.md
+tests
+report.xml
+coverage.xml

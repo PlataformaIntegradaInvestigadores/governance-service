@@ -18,4 +18,3 @@
 - [ ] Calidad y criterios de aceptación comprobados.
 - [ ] Sin secretos ni archivos locales de contexto.
 - [ ] Configuración y documentación actualizadas.
-

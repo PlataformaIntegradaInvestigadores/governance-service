@@ -36,4 +36,3 @@ jobs:
             coverage.xml
       - run: docker compose config --quiet
       - run: docker build -t governance-service:${{ github.sha }} .
-

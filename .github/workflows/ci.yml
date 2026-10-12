@@ -36,3 +36,39 @@ jobs:
             coverage.xml
       - run: docker compose config --quiet
       - run: docker build -t governance-service:${{ github.sha }} .
+
+  deploy-staging:
+    name: Deploy a servidor staging
+    runs-on: [self-hosted, staging]
+    needs: quality
+    if: github.ref == 'refs/heads/develop'
+    steps:
+      - name: Actualizar codigo
+        run: |
+          cd /opt/centinela/governance-service
+          git fetch origin develop
+          git reset --hard origin/develop
+
+      - name: Reconstruir contenedor
+        run: |
+          cd /opt/centinela/governance-service
+          docker compose up -d --build --remove-orphans
+
+      - name: Health check
+        run: |
+          sleep 10
+          HEALTHY=false
+          for i in 1 2 3 4 5; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://localhost:8005/health || echo "000")
+            echo "Intento $i: HTTP $STATUS"
+            if [ "$STATUS" = "200" ]; then
+              HEALTHY=true; break
+            fi
+            sleep 6
+          done
+          if [ "$HEALTHY" = "false" ]; then
+            echo "Health check fallido — rollback"
+            cd /opt/centinela/governance-service && git reset --hard HEAD~1
+            docker compose up -d --build --remove-orphans
+            exit 1
+          fi

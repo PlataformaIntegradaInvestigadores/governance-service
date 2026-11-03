@@ -1,8 +1,39 @@
 # Centinela Governance Service
 
-Initial service bootstrap for Component E. This increment exposes runtime
-health, service metadata and OpenAPI documentation. Governance policies,
-interception, human review, audit persistence and explainability are pending.
+Service bootstrap for Component E, with an offline Q&A response assessment
+increment. The API exposes runtime health, service metadata and OpenAPI.
+Interception, approved policies, human review, audit persistence and
+explainability are pending; governance is not enabled for live traffic.
+
+## Local Q&A assessment
+
+`app.infrastructure.qa_response.assess_qa_response` validates a supplied
+`search-service/generate-qa` response, then calls the application policy
+evaluator. The domain contains immutable observations, policy identity and
+decisions, without HTTP, persistence or framework dependencies.
+
+```python
+from app.domain.qa import QaPolicy
+from app.infrastructure.qa_response import assess_qa_response
+
+policy = QaPolicy("alexander-qa-review", "draft-1", expected_pairs=3)
+result = assess_qa_response({"status": "error", "qa_pairs": []}, policy)
+assert result.verdict == "deny"
+assert result.reason_codes == ("UPSTREAM_GENERATION_FAILED",)
+```
+
+Malformed bodies, generation errors and unusable pair counts are denied.
+Nonempty responses within the expected count are suspended for human review,
+with additional reasons for partial generation or incomplete source identifiers.
+Every assessment identifies its policy and version and excludes response text.
+Complete output is also suspended: source identifiers do not verify the actual
+context, factual correctness or claim-to-source support. The example policy is
+an experimental local policy, not an approved institutional threshold.
+
+This function is not an HTTP gate or a persisted review. Calling it neither
+releases content nor creates an audit event. HTTP status alone must not be
+used to interpret generation success; the upstream can return errors in a 200
+body. There is no automatic allow path in this increment.
 
 ## Run locally
 
@@ -52,10 +83,11 @@ only. No database or upstream connection is needed for this increment.
 
 ## Architecture
 
-The present code contains the API adapter, configuration and composition
-root. Domain policies and application use cases will be introduced with the
-corresponding backlog tasks, preserving inward dependencies. No empty
-repositories or policy engines are presented as implemented.
+The API adapter, configuration and composition root retain their bootstrap
+behavior. The local Q&A assessment adds domain models, an application evaluator
+and an infrastructure response adapter. The adapter depends on the application
+and domain; the application depends only on the domain. No persistence,
+gateway interception or review endpoint is introduced by this increment.
 
 OpenAPI follows the existing search-bff pattern: internal /api/v1 paths are
 rendered relative to a configured server. Local server: /api/v1; planned
@@ -69,5 +101,13 @@ See [FastAPI metadata](https://fastapi.tiangolo.com/tutorial/metadata/) and
 Existing Azure work items: AB#221 (PBI), AB#222 (bootstrap),
 AB#223 (workflows/templates) and AB#224 (container configuration).
 Local thesis context and evidence are maintained outside this repository.
-Next: confirm GRS contracts and design decisions, then implement the PDP/PEP
-and policy storage under their existing backlog tasks.
+The local Q&A assessment advances AB#230/231 (policy evaluation and tests).
+Next: confirm the governed assistant contract, persist decisions and reviews,
+then connect the PEP under the existing tasks. The separate rag-service /ask
+integration remains conditional on its contract, data and approved scope.
+
+## Publication
+
+Keep development commits local on feature branches. Push, branch/PR publication,
+remote merges and deployment require the owner's explicit instruction or
+approval for that step. Local thesis documents and AGENTS.md stay outside Git.

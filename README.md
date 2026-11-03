@@ -1,9 +1,10 @@
 # Centinela Governance Service
 
-Service bootstrap for Component E, with an offline Q&A response assessment
-increment. The API exposes runtime health, service metadata and OpenAPI.
-Interception, approved policies, human review, audit persistence and
-explainability are pending; governance is not enabled for live traffic.
+Service bootstrap for Component E, with offline Q&A assessment, versioned
+experimental policies and transactional local decision storage. The API exposes
+runtime health, service metadata and OpenAPI. Interception, approved policies,
+human review, PostgreSQL forensic audit and explainability are pending;
+governance is not enabled for live traffic.
 
 ## Local Q&A assessment
 
@@ -34,6 +35,51 @@ This function is not an HTTP gate or a persisted review. Calling it neither
 releases content nor creates an audit event. HTTP status alone must not be
 used to interpret generation success; the upstream can return errors in a 200
 body. There is no automatic allow path in this increment.
+
+## Versioned local assessments
+
+The composition root also exposes an offline workflow that loads a strict JSON
+policy, evaluates a supplied response and saves a decision before returning it:
+
+```python
+from pathlib import Path
+
+from app.main import create_qa_assessor
+from app.infrastructure.sqlite_assessment_repository import SqliteAssessmentRepository
+
+Path("local").mkdir(exist_ok=True)
+database = Path("local/assessments.sqlite3")
+assessor = create_qa_assessor(
+    Path("policies/alexander-qa-review.draft-1.json"), database
+)
+record = assessor.execute({"status": "error", "qa_pairs": []})
+assert SqliteAssessmentRepository(database).get(record.assessment_id) == record
+```
+
+The policy file is experimental. Its contract and intended meaning are documented
+in [the Q&A contract](docs/contracts/alexander-generate-qa.v1.md). Missing,
+malformed, duplicate-key or invalid policies fail without a hardcoded fallback.
+Changing a policy requires a new version: reusing the same ID/version for another
+snapshot raises `PolicyVersionConflict` without saving another decision.
+
+SQLite stores the policy snapshot and SHA-256 together with each decision's ID,
+UTC timestamp, verdict and reason codes. Policy insertion and decision insertion
+share one transaction. An insertion or commit error propagates to the caller;
+the workflow does not return a record as saved. Reopening the repository recovers
+the persisted record. The response, raw generated text and retained output are
+not stored, so this increment cannot later release content for human review.
+
+Local triggers reject updates and deletes; a policy snapshot checksum detects
+inconsistent content when read. A database file owner can replace records or
+disable/recreate triggers and checksums. This is not a hash chain, independently
+anchored audit log, authorization boundary or production database. Read access
+is local to Python callers, with no HTTP query endpoint. Store local databases
+under the ignored `local/` directory and use synthetic data for demonstrations.
+
+JSON and SQLite use available dependencies and Python's standard library for
+this local increment. The planned YAML policy store and PostgreSQL audit adapter,
+roles, migrations and integrity model remain pending. No production deployment,
+automatic schema migration or approval of institutional policy is implied.
 
 ## Run locally
 
@@ -83,11 +129,12 @@ only. No database or upstream connection is needed for this increment.
 
 ## Architecture
 
-The API adapter, configuration and composition root retain their bootstrap
-behavior. The local Q&A assessment adds domain models, an application evaluator
-and an infrastructure response adapter. The adapter depends on the application
-and domain; the application depends only on the domain. No persistence,
-gateway interception or review endpoint is introduced by this increment.
+The API retains its bootstrap behavior. Domain models and repository protocols
+are independent of frameworks and storage. Application use cases evaluate and
+record decisions through those protocols. Infrastructure supplies strict JSON
+policy loading, response validation and SQLite storage; `main` composes them for
+the offline workflow. The application does not import Pydantic, HTTP or SQLite.
+There is no gateway interception, review endpoint or automatic content release.
 
 OpenAPI follows the existing search-bff pattern: internal /api/v1 paths are
 rendered relative to a configured server. Local server: /api/v1; planned
@@ -102,9 +149,11 @@ Existing Azure work items: AB#221 (PBI), AB#222 (bootstrap),
 AB#223 (workflows/templates) and AB#224 (container configuration).
 Local thesis context and evidence are maintained outside this repository.
 The local Q&A assessment advances AB#230/231 (policy evaluation and tests).
-Next: confirm the governed assistant contract, persist decisions and reviews,
-then connect the PEP under the existing tasks. The separate rag-service /ask
-integration remains conditional on its contract, data and approved scope.
+Local policy loading and decision snapshots provide partial groundwork for
+AB#217/218/236/237 and AB#258/260. They do not complete the YAML or PostgreSQL
+tasks. Next: handle retained evidence and authenticated persistent reviews,
+implement the agreed audit guarantees, then connect the PEP. The separate
+rag-service /ask integration remains conditional on contract, data and scope.
 
 ## Publication
 

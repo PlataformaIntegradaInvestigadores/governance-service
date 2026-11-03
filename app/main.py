@@ -1,3 +1,4 @@
+from pathlib import Path
 from uuid import uuid4
 
 from fastapi import FastAPI, Request
@@ -5,7 +6,19 @@ from fastapi.openapi.utils import get_openapi
 
 from app import __version__
 from app.api.routes import health_router, router
+from app.application.record_qa_assessment import RecordQaAssessment
 from app.core.config import Settings
+from app.infrastructure.json_policy_repository import JsonPolicyRepository
+from app.infrastructure.qa_response import assess_qa_response
+from app.infrastructure.sqlite_assessment_repository import SqliteAssessmentRepository
+
+
+def create_qa_assessor(policy_path: Path, database_path: Path) -> RecordQaAssessment:
+    return RecordQaAssessment(
+        JsonPolicyRepository(policy_path),
+        SqliteAssessmentRepository(database_path),
+        assess_qa_response,
+    )
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:

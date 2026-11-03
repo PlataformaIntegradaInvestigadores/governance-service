@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import datetime
 from enum import StrEnum
 
 
@@ -40,3 +41,15 @@ class Assessment:
     policy_id: str
     policy_version: str
     reason_codes: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class RecordedAssessment:
+    assessment_id: str
+    created_at: datetime
+    policy: QaPolicy
+    assessment: Assessment
+
+
+class PolicyVersionConflict(ValueError):
+    pass

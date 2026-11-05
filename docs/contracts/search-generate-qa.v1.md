@@ -1,4 +1,4 @@
-# Alexander assistant response contract — local revision 1
+# Search Q&A assistant response contract — local revision 1
 
 This document describes the observed contract used by the local assessor, not an
 approved institutional policy or a deployed governance route.
@@ -33,7 +33,7 @@ must not be treated as an allow decision.
 
 ## Experimental policy
 
-`policies/alexander-qa-review.draft-1.json` records ID, version and expected pair
+`policies/search-qa-review.draft-1.json` records ID, version and expected pair
 count. The expected count of three reflects the observed assistant contract;
 it is not a threshold for factual quality or fairness. Invalid, incomplete or
 duplicate-key policy documents fail before a decision is saved.

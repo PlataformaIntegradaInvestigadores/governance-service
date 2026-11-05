@@ -246,7 +246,6 @@ def test_database_cannot_be_created_in_a_missing_parent(tmp_path, policy_path):
 
 def test_checked_in_policy_has_the_documented_experimental_version():
     policy = JsonPolicyRepository(
-        Path(__file__).resolve().parents[1]
-        / "policies/alexander-qa-review.draft-1.json"
+        Path(__file__).resolve().parents[1] / "policies/search-qa-review.draft-1.json"
     ).load()
-    assert policy == QaPolicy("alexander-qa-review", "draft-1", 3)
+    assert policy == QaPolicy("search-qa-review", "draft-1", 3)

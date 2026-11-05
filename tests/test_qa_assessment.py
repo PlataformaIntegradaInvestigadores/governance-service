@@ -8,7 +8,7 @@ from app.infrastructure.qa_response import assess_qa_response
 
 @pytest.fixture
 def policy():
-    return QaPolicy("alexander-qa-review", "draft-1", 3)
+    return QaPolicy("search-qa-review", "draft-1", 3)
 
 
 @pytest.fixture

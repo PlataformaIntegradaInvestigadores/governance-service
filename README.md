@@ -18,7 +18,7 @@ decisions, without HTTP, persistence or framework dependencies.
 from app.domain.qa import QaPolicy
 from app.infrastructure.qa_response import assess_qa_response
 
-policy = QaPolicy("alexander-qa-review", "draft-1", expected_pairs=3)
+policy = QaPolicy("search-qa-review", "draft-1", expected_pairs=3)
 result = assess_qa_response({"status": "error", "qa_pairs": []}, policy)
 assert result.verdict == "deny"
 assert result.reason_codes == ("UPSTREAM_GENERATION_FAILED",)
@@ -51,14 +51,14 @@ from app.infrastructure.sqlite_assessment_repository import SqliteAssessmentRepo
 Path("local").mkdir(exist_ok=True)
 database = Path("local/assessments.sqlite3")
 assessor = create_qa_assessor(
-    Path("policies/alexander-qa-review.draft-1.json"), database
+    Path("policies/search-qa-review.draft-1.json"), database
 )
 record = assessor.execute({"status": "error", "qa_pairs": []})
 assert SqliteAssessmentRepository(database).get(record.assessment_id) == record
 ```
 
 The policy file is experimental. Its contract and intended meaning are documented
-in [the Q&A contract](docs/contracts/alexander-generate-qa.v1.md). Missing,
+in [the Q&A contract](docs/contracts/search-generate-qa.v1.md). Missing,
 malformed, duplicate-key or invalid policies fail without a hardcoded fallback.
 Changing a policy requires a new version: reusing the same ID/version for another
 snapshot raises `PolicyVersionConflictError` without saving another decision.

@@ -10,6 +10,7 @@ from app.domain.qa import (
     QaPolicy,
     Verdict,
 )
+from app.domain.review import RetainedQaContent, RetainedQaPair
 
 NonEmptyText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 
@@ -67,3 +68,16 @@ def assess_qa_response(payload: object, policy: QaPolicy) -> Assessment:
         has_error=bool(response.error),
     )
     return assess_generation(observation, policy)
+
+
+def retain_qa_content(payload: object) -> RetainedQaContent:
+    """Keep only the pairs and source identifiers a reviewer needs."""
+    response = _QaResponse.model_validate(payload)
+    return RetainedQaContent(
+        tuple(RetainedQaPair(pair.question, pair.answer) for pair in response.qa_pairs),
+        tuple(
+            str(source.article_id).strip()
+            for source in response.source_docs
+            if source.article_id is not None and str(source.article_id).strip()
+        ),
+    )

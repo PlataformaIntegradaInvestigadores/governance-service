@@ -1,7 +1,8 @@
 # Centinela Governance Service
 
 Service bootstrap for Component E, with offline Q&A assessment, versioned
-experimental policies and transactional local decision storage. The API exposes
+experimental policies, transactional local decision storage and protected review
+cases for suspended output. The API exposes
 runtime health, service metadata and OpenAPI. Interception, approved policies,
 human review, PostgreSQL forensic audit and explainability are pending;
 governance is not enabled for live traffic.
@@ -66,8 +67,37 @@ SQLite stores the policy snapshot and SHA-256 together with each decision's ID,
 UTC timestamp, verdict and reason codes. Policy insertion and decision insertion
 share one transaction. An insertion or commit error propagates to the caller;
 the workflow does not return a record as saved. Reopening the repository recovers
-the persisted record. The response, raw generated text and retained output are
-not stored, so this increment cannot later release content for human review.
+the persisted record. Denied responses store no generated text.
+
+## Protected review cases
+
+A suspended assessment also opens a review case in the same transaction. The
+case keeps what a reviewer needs and nothing else: the question/answer pairs
+(surrounding whitespace removed) and the source article identifiers present in
+the response. Raw output and other upstream fields are discarded. The decision
+record carries `review_case_id`; the case carries `assessment_id`, and both are
+unique, so each case belongs to exactly one suspended decision.
+
+```python
+from app.infrastructure.sqlite_assessment_repository import SqliteReviewCaseRepository
+
+case = SqliteReviewCaseRepository(database).get(record.review_case_id)
+```
+
+Content is kept apart from general queries. `SqliteAssessmentRepository.get`
+returns decision metadata and the case ID only; only `SqliteReviewCaseRepository`
+reads the content. `repr` of retained content shows counts, not text, and the
+service writes no logs about it. A failed write of the case rolls back the
+decision and policy snapshot too. A case is append-only, SQLite rejects one for
+a non-suspended decision, and a SHA-256 digest detects altered content on read
+(`ReviewCaseIntegrityError`, whose message has no content).
+
+Limits of this prototype: there is no authentication, authorization or
+encryption at rest, so any process that can open the file can read the content.
+For that reason no HTTP route exposes cases. Reviewer decisions, expiry and
+release are not implemented; a case stays pending. Decisions stored before this
+change have `review_case_id = None`. See
+[ADR 0001](docs/adr/0001-protected-review-cases-in-local-store.md).
 
 Local triggers reject updates and deletes; a policy snapshot checksum detects
 inconsistent content when read. A database file owner can replace records or
@@ -137,6 +167,7 @@ record decisions through those protocols. Infrastructure supplies strict JSON
 policy loading, response validation and SQLite storage; `main` composes them for
 the offline workflow. The application does not import Pydantic, HTTP or SQLite.
 There is no gateway interception, review endpoint or automatic content release.
+Decisions are recorded under `docs/adr/`.
 
 OpenAPI follows the existing search-bff pattern: internal /api/v1 paths are
 rendered relative to a configured server. Local server: /api/v1; planned
@@ -153,8 +184,10 @@ Local thesis context and evidence are maintained outside this repository.
 The local Q&A assessment advances AB#230/231 (policy evaluation and tests).
 Local policy loading and decision snapshots provide partial groundwork for
 AB#217/218/236/237 and AB#258/260. They do not complete the YAML or PostgreSQL
-tasks. Next: handle retained evidence and authenticated persistent reviews,
-implement the agreed audit guarantees, then connect the PEP. The separate
+tasks. Protected review cases advance AB#240/241 locally; the PostgreSQL
+repository, 202 response, request evidence and explanation remain pending.
+Next: authenticated reviewers (AB#248), reviewer decisions and expiry
+(AB#244/245), the agreed audit guarantees, then the PEP. The separate
 rag-service /ask integration remains conditional on contract, data and scope.
 
 ## Publication

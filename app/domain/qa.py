@@ -49,6 +49,7 @@ class RecordedAssessment:
     created_at: datetime
     policy: QaPolicy
     assessment: Assessment
+    review_case_id: str | None = None
 
 
 class PolicyVersionConflictError(ValueError):

@@ -14,8 +14,11 @@ from app.domain.qa import (
     Verdict,
 )
 from app.infrastructure.json_policy_repository import JsonPolicyRepository
-from app.infrastructure.qa_response import assess_qa_response
-from app.infrastructure.sqlite_assessment_repository import SqliteAssessmentRepository
+from app.infrastructure.qa_response import assess_qa_response, retain_qa_content
+from app.infrastructure.sqlite_assessment_repository import (
+    SqliteAssessmentRepository,
+    SqliteReviewCaseRepository,
+)
 from app.main import create_qa_assessor
 
 
@@ -57,7 +60,7 @@ def test_assessment_and_exact_policy_survive_repository_reopening(
             0
         ]
         assert json.loads(snapshot) == asdict(loaded.policy)
-        assert "Confidential" not in "\n".join(connection.iterdump())
+        assert "Confidential raw output" not in "\n".join(connection.iterdump())
 
 
 def test_invalid_upstream_response_also_has_a_persisted_decision(
@@ -111,7 +114,10 @@ def test_policy_snapshot_is_the_one_used_by_the_evaluator(
         return assess_qa_response(response, policy)
 
     assessor = RecordQaAssessment(
-        JsonPolicyRepository(policy_path), repository, change_file_after_loading
+        JsonPolicyRepository(policy_path),
+        repository,
+        change_file_after_loading,
+        retain_qa_content,
     )
     record = assessor.execute(payload)
 
@@ -152,11 +158,14 @@ def test_missing_policy_fails_without_a_fallback(policy_path, database_path):
 
 def test_storage_exception_is_not_returned_as_a_saved_assessment(policy_path):
     class FailingRepository:
-        def save(self, record):
+        def save(self, record, review_case):
             raise OSError("Storage unavailable")
 
     assessor = RecordQaAssessment(
-        JsonPolicyRepository(policy_path), FailingRepository(), assess_qa_response
+        JsonPolicyRepository(policy_path),
+        FailingRepository(),
+        assess_qa_response,
+        retain_qa_content,
     )
     with pytest.raises(OSError, match="Storage unavailable"):
         assessor.execute({})
@@ -204,8 +213,9 @@ def test_duplicate_decision_id_does_not_overwrite_original(
 ):
     original = create_qa_assessor(policy_path, database_path).execute(payload)
     repository = SqliteAssessmentRepository(database_path)
+    case = SqliteReviewCaseRepository(database_path).get(original.review_case_id)
     with pytest.raises(sqlite3.IntegrityError):
-        repository.save(original)
+        repository.save(original, case)
     assert repository.get(original.assessment_id) == original
 
 
@@ -213,7 +223,7 @@ def test_mismatched_policy_identity_is_rejected(policy_path, database_path):
     record = create_qa_assessor(policy_path, database_path).execute({})
     mismatched = replace(record, policy=QaPolicy("another-policy", "draft-1", 3))
     with pytest.raises(ValueError, match="identities must match"):
-        SqliteAssessmentRepository(database_path).save(mismatched)
+        SqliteAssessmentRepository(database_path).save(mismatched, None)
 
 
 def test_unknown_assessment_is_absent(database_path):

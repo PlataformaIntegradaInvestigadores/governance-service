@@ -26,8 +26,9 @@ route or send requests to it.
 | `error` | Optional string or null | A nonempty value causes denial even with success status |
 
 Malformed types or unknown states are denied. Other upstream fields are ignored
-by this structural assessor. The generated text is not copied into the decision
-or local database. A 200 transport response can contain an upstream error and
+by this structural assessor. The generated text is not copied into the decision.
+For suspended responses only, the pairs and present source identifiers are
+retained in a protected review case (see below). A 200 transport response can contain an upstream error and
 must not be treated as an allow decision.
 
 ## Experimental policy
@@ -49,10 +50,13 @@ rejected. Policy changes require a new version. The store retains both versions
 and their decisions; it does not overwrite prior rows.
 
 Persisted metadata includes a UUID, UTC timestamp, policy snapshot/checksum,
-verdict and reason codes. It excludes the original request, generated text and
-retained output. Failed writes propagate without a successful saved result.
+verdict, reason codes and, for suspensions, the review case ID. A suspended
+response also stores a review case with its `qa_pairs` text (whitespace-trimmed)
+and nonblank `source_docs[].article_id` values, in the same transaction. The
+original request, raw output and other fields are not stored. Failed writes
+propagate without a successful saved result and leave no partial rows.
 
 SQLite triggers and a policy checksum are limited local safeguards. A database
 owner can rewrite the file or regenerate checksums. PostgreSQL roles, a hash
-chain and independent checkpoints, authenticated review and protected retained
-evidence remain pending. This contract does not authorize live content delivery.
+chain and independent checkpoints, authenticated and authorized review,
+encryption at rest, reviewer decisions and expiry remain pending. This contract does not authorize live content delivery.

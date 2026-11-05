@@ -132,13 +132,24 @@ Clean/Hexagonal layers with the dependency rule:
 
 ## 9. Git workflow
 
+- Start every session by syncing: `git fetch --prune`, then
+  `git pull --ff-only` on a clean tree. Never pull over uncommitted work. If
+  `origin/develop` moved, bring the feature branch up to date (rebase while
+  unpublished, merge once published) and rerun the checks. Review open issues,
+  pull requests and recent CI runs before editing.
 - Branch from an updated `develop`: `feature/<kebab-slug>`, `chore/<slug>`,
   `hotfix/<slug>`.
 - Conventional Commits in English, `type(scope): summary`, with the reason in
   the body. One logical change per commit; tests in the same commit as the
   behavior they verify.
-- Pushing, opening pull requests, merging and deploying follow the repository
-  owner's approval.
+- Push a feature branch once its increment passes the checks. Do not
+  force-push a published branch or push directly to `develop` or `main`.
+- Opening a pull request, merging and deploying require the repository owner's
+  approval. A merge to `develop` deploys to staging automatically.
+- Pull requests use the organization template, link their issue with
+  `Closes #<n>` and request review from the CODEOWNERS team. GitHub closes the
+  issue automatically only on merge to `main`; after a merge to `develop`,
+  close it manually once its acceptance criteria hold.
 
 ## 10. Definition of done for a code change
 
@@ -151,7 +162,8 @@ A change is done when all of these hold:
    tests, logs or fixtures.
 4. README, contracts and ADRs reflect the change and its limits.
 5. The diff was self-reviewed against sections 2 to 6.
-6. The commit follows section 9 and references the work item.
+6. The commit follows section 9, references the work item and is pushed to
+   its feature branch.
 
 ```powershell
 python -m ruff check .

@@ -192,6 +192,8 @@ rag-service /ask integration remains conditional on contract, data and scope.
 
 ## Publication
 
-Keep development commits local on feature branches. Push, branch/PR publication,
-remote merges and deployment require the owner's explicit instruction or
-approval for that step. Local thesis documents and AGENTS.md stay outside Git.
+Sync before starting and push feature branches after their checks pass. Opening
+pull requests, merging and deployment require the owner's approval, because a
+merge to `develop` deploys to staging automatically. See section 9 of
+[the engineering standards](docs/engineering-standards.md). Local thesis
+documents and AGENTS.md stay outside Git.

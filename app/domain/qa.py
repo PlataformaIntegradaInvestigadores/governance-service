@@ -51,5 +51,9 @@ class RecordedAssessment:
     assessment: Assessment
 
 
-class PolicyVersionConflict(ValueError):
+class PolicyVersionConflictError(ValueError):
+    pass
+
+
+class InvalidPolicyError(ValueError):
     pass

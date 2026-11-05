@@ -97,7 +97,7 @@ def test_explicit_error_overrides_success_status(response, policy):
 
 
 @pytest.mark.parametrize(
-    "count,reason", [(0, "NO_VALID_PAIRS"), (4, "UNEXPECTED_PAIR_COUNT")]
+    ("count", "reason"), [(0, "NO_VALID_PAIRS"), (4, "UNEXPECTED_PAIR_COUNT")]
 )
 def test_unusable_pair_counts_are_denied(response, policy, count, reason):
     response["qa_pairs"] = [{"question": "Q", "answer": "A"}] * count
@@ -127,7 +127,7 @@ def test_malformed_payloads_fail_closed(policy, payload):
 
 
 @pytest.mark.parametrize(
-    "policy_id,version,count",
+    ("policy_id", "version", "count"),
     [
         (" ", "draft-1", 3),
         ("qa", " ", 3),
@@ -138,5 +138,5 @@ def test_malformed_payloads_fail_closed(policy, payload):
     ],
 )
 def test_invalid_policy_configuration_is_rejected(policy_id, version, count):
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match=r"must not be blank|must be a positive"):
         QaPolicy(policy_id, version, count)

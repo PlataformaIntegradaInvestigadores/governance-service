@@ -7,7 +7,12 @@ from pathlib import Path
 import pytest
 
 from app.application.record_qa_assessment import RecordQaAssessment
-from app.domain.qa import PolicyVersionConflict, QaPolicy, Verdict
+from app.domain.qa import (
+    InvalidPolicyError,
+    PolicyVersionConflictError,
+    QaPolicy,
+    Verdict,
+)
 from app.infrastructure.json_policy_repository import JsonPolicyRepository
 from app.infrastructure.qa_response import assess_qa_response
 from app.infrastructure.sqlite_assessment_repository import SqliteAssessmentRepository
@@ -73,7 +78,7 @@ def test_conflicting_policy_version_is_rejected_without_another_decision(
     first = assessor.execute(payload)
     policy_path.write_text(json.dumps(asdict(QaPolicy("qa-review", "draft-1", 4))))
 
-    with pytest.raises(PolicyVersionConflict):
+    with pytest.raises(PolicyVersionConflictError):
         assessor.execute(payload)
 
     repository = SqliteAssessmentRepository(database_path)
@@ -132,7 +137,7 @@ def test_invalid_policy_never_produces_a_record(policy_path, database_path, docu
     policy_path.write_text(document)
     assessor = create_qa_assessor(policy_path, database_path)
 
-    with pytest.raises(ValueError):
+    with pytest.raises(InvalidPolicyError, match="Invalid policy file"):
         assessor.execute({})
 
     with sqlite3.connect(database_path) as connection:
@@ -187,9 +192,11 @@ def test_local_tables_reject_update_and_delete(
         ("assessments", "UPDATE"): "UPDATE assessments SET verdict = 'suspend'",
         ("assessments", "DELETE"): "DELETE FROM assessments",
     }
-    with sqlite3.connect(database_path) as connection:
-        with pytest.raises(sqlite3.IntegrityError, match="append-only"):
-            connection.execute(statements[table, operation])
+    with (
+        sqlite3.connect(database_path) as connection,
+        pytest.raises(sqlite3.IntegrityError, match="append-only"),
+    ):
+        connection.execute(statements[table, operation])
 
 
 def test_duplicate_decision_id_does_not_overwrite_original(

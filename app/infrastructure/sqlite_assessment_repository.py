@@ -8,7 +8,7 @@ from pathlib import Path
 
 from app.domain.qa import (
     Assessment,
-    PolicyVersionConflict,
+    PolicyVersionConflictError,
     QaPolicy,
     RecordedAssessment,
     Verdict,
@@ -72,7 +72,7 @@ class SqliteAssessmentRepository:
                 (policy.policy_id, policy.version),
             ).fetchone()
             if stored != (snapshot, digest):
-                raise PolicyVersionConflict(
+                raise PolicyVersionConflictError(
                     "Policy content changed without a new version"
                 )
             connection.execute(

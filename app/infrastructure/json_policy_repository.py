@@ -1,9 +1,9 @@
 import json
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, ValidationError
 
-from app.domain.qa import QaPolicy
+from app.domain.qa import InvalidPolicyError, QaPolicy
 
 
 class _PolicyDocument(BaseModel):
@@ -28,8 +28,12 @@ class JsonPolicyRepository:
         self._path = path
 
     def load(self) -> QaPolicy:
-        payload = json.loads(
-            self._path.read_text(encoding="utf-8"), object_pairs_hook=_unique_object
-        )
-        document = _PolicyDocument.model_validate(payload)
-        return QaPolicy(**document.model_dump())
+        text = self._path.read_text(encoding="utf-8")
+        try:
+            payload = json.loads(text, object_pairs_hook=_unique_object)
+            document = _PolicyDocument.model_validate(payload)
+            return QaPolicy(**document.model_dump())
+        except (ValidationError, ValueError) as error:
+            raise InvalidPolicyError(
+                f"Invalid policy file: {self._path.name}"
+            ) from error

@@ -1,7 +1,8 @@
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from uuid import uuid4
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.openapi.utils import get_openapi
 
 from app import __version__
@@ -33,7 +34,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(router, prefix="/api/v1")
 
     @application.middleware("http")
-    async def add_trace_id(request: Request, call_next):
+    async def add_trace_id(
+        request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
         trace_id = str(uuid4())
         request.state.trace_id = trace_id
         response = await call_next(request)

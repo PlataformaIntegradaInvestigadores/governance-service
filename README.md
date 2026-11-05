@@ -60,7 +60,7 @@ The policy file is experimental. Its contract and intended meaning are documente
 in [the Q&A contract](docs/contracts/alexander-generate-qa.v1.md). Missing,
 malformed, duplicate-key or invalid policies fail without a hardcoded fallback.
 Changing a policy requires a new version: reusing the same ID/version for another
-snapshot raises `PolicyVersionConflict` without saving another decision.
+snapshot raises `PolicyVersionConflictError` without saving another decision.
 
 SQLite stores the policy snapshot and SHA-256 together with each decision's ID,
 UTC timestamp, verdict and reason codes. Policy insertion and decision insertion
@@ -111,7 +111,9 @@ uses its --port argument. Invalid settings fail during application creation.
 .\.venv\Scripts\python.exe -m pytest --cov=app --cov-report=term-missing --cov-report=xml --junitxml=report.xml
 ```
 
-Coverage includes branches and must reach 90%. The CI workflow targets
+Coverage includes branches and must reach 90%. Coding, testing, security and
+review rules are in [the engineering standards](docs/engineering-standards.md);
+Ruff and `tests/test_architecture.py` enforce part of them. The CI workflow targets
 Python 3.11, validates Compose and builds the Docker image. It does not deploy.
 Organization deployment workflows require agreed server paths, runners and
 permissions before configuration.

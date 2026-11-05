@@ -7,6 +7,7 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .coverage
+/local/
 coverage.xml
 report.xml
 htmlcov/

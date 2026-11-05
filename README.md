@@ -1,8 +1,115 @@
 # Centinela Governance Service
 
-Initial service bootstrap for Component E. This increment exposes runtime
-health, service metadata and OpenAPI documentation. Governance policies,
-interception, human review, audit persistence and explainability are pending.
+Service bootstrap for Component E, with offline Q&A assessment, versioned
+experimental policies, transactional local decision storage and protected review
+cases for suspended output. The API exposes
+runtime health, service metadata and OpenAPI. Interception, approved policies,
+human review, PostgreSQL forensic audit and explainability are pending;
+governance is not enabled for live traffic.
+
+## Local Q&A assessment
+
+`app.infrastructure.qa_response.assess_qa_response` validates a supplied
+`search-service/generate-qa` response, then calls the application policy
+evaluator. The domain contains immutable observations, policy identity and
+decisions, without HTTP, persistence or framework dependencies.
+
+```python
+from app.domain.qa import QaPolicy
+from app.infrastructure.qa_response import assess_qa_response
+
+policy = QaPolicy("search-qa-review", "draft-1", expected_pairs=3)
+result = assess_qa_response({"status": "error", "qa_pairs": []}, policy)
+assert result.verdict == "deny"
+assert result.reason_codes == ("UPSTREAM_GENERATION_FAILED",)
+```
+
+Malformed bodies, generation errors and unusable pair counts are denied.
+Nonempty responses within the expected count are suspended for human review,
+with additional reasons for partial generation or incomplete source identifiers.
+Every assessment identifies its policy and version and excludes response text.
+Complete output is also suspended: source identifiers do not verify the actual
+context, factual correctness or claim-to-source support. The example policy is
+an experimental local policy, not an approved institutional threshold.
+
+This function is not an HTTP gate or a persisted review. Calling it neither
+releases content nor creates an audit event. HTTP status alone must not be
+used to interpret generation success; the upstream can return errors in a 200
+body. There is no automatic allow path in this increment.
+
+## Versioned local assessments
+
+The composition root also exposes an offline workflow that loads a strict JSON
+policy, evaluates a supplied response and saves a decision before returning it:
+
+```python
+from pathlib import Path
+
+from app.main import create_qa_assessor
+from app.infrastructure.sqlite_assessment_repository import SqliteAssessmentRepository
+
+Path("local").mkdir(exist_ok=True)
+database = Path("local/assessments.sqlite3")
+assessor = create_qa_assessor(
+    Path("policies/search-qa-review.draft-1.json"), database
+)
+record = assessor.execute({"status": "error", "qa_pairs": []})
+assert SqliteAssessmentRepository(database).get(record.assessment_id) == record
+```
+
+The policy file is experimental. Its contract and intended meaning are documented
+in [the Q&A contract](docs/contracts/search-generate-qa.v1.md). Missing,
+malformed, duplicate-key or invalid policies fail without a hardcoded fallback.
+Changing a policy requires a new version: reusing the same ID/version for another
+snapshot raises `PolicyVersionConflictError` without saving another decision.
+
+SQLite stores the policy snapshot and SHA-256 together with each decision's ID,
+UTC timestamp, verdict and reason codes. Policy insertion and decision insertion
+share one transaction. An insertion or commit error propagates to the caller;
+the workflow does not return a record as saved. Reopening the repository recovers
+the persisted record. Denied responses store no generated text.
+
+## Protected review cases
+
+A suspended assessment also opens a review case in the same transaction. The
+case keeps what a reviewer needs and nothing else: the question/answer pairs
+(surrounding whitespace removed) and the source article identifiers present in
+the response. Raw output and other upstream fields are discarded. The decision
+record carries `review_case_id`; the case carries `assessment_id`, and both are
+unique, so each case belongs to exactly one suspended decision.
+
+```python
+from app.infrastructure.sqlite_assessment_repository import SqliteReviewCaseRepository
+
+case = SqliteReviewCaseRepository(database).get(record.review_case_id)
+```
+
+Content is kept apart from general queries. `SqliteAssessmentRepository.get`
+returns decision metadata and the case ID only; only `SqliteReviewCaseRepository`
+reads the content. `repr` of retained content shows counts, not text, and the
+service writes no logs about it. A failed write of the case rolls back the
+decision and policy snapshot too. A case is append-only, SQLite rejects one for
+a non-suspended decision, and a SHA-256 digest detects altered content on read
+(`ReviewCaseIntegrityError`, whose message has no content).
+
+Limits of this prototype: there is no authentication, authorization or
+encryption at rest, so any process that can open the file can read the content.
+For that reason no HTTP route exposes cases. Reviewer decisions, expiry and
+release are not implemented; a case stays pending. Decisions stored before this
+change have `review_case_id = None`. See
+[ADR 0001](docs/adr/0001-protected-review-cases-in-local-store.md).
+
+Local triggers reject updates and deletes; a policy snapshot checksum detects
+inconsistent content when read. A database file owner can replace records or
+disable/recreate triggers and checksums. This is not a hash chain, independently
+anchored audit log, authorization boundary or production database. Read access
+is local to Python callers, with no HTTP query endpoint. Store local databases
+under the ignored `local/` directory and use synthetic data for demonstrations.
+
+JSON and SQLite use available dependencies and Python's standard library for
+this local increment. The planned YAML policy store and PostgreSQL audit adapter,
+roles, migrations and integrity model remain pending. No production deployment,
+automatic schema migration or approval of institutional policy is implied.
 
 ## Run locally
 
@@ -34,7 +141,9 @@ uses its --port argument. Invalid settings fail during application creation.
 .\.venv\Scripts\python.exe -m pytest --cov=app --cov-report=term-missing --cov-report=xml --junitxml=report.xml
 ```
 
-Coverage includes branches and must reach 90%. The CI workflow targets
+Coverage includes branches and must reach 90%. Coding, testing, security and
+review rules are in [the engineering standards](docs/engineering-standards.md);
+Ruff and `tests/test_architecture.py` enforce part of them. The CI workflow targets
 Python 3.11, validates Compose and builds the Docker image. It does not deploy.
 Organization deployment workflows require agreed server paths, runners and
 permissions before configuration.
@@ -52,10 +161,13 @@ only. No database or upstream connection is needed for this increment.
 
 ## Architecture
 
-The present code contains the API adapter, configuration and composition
-root. Domain policies and application use cases will be introduced with the
-corresponding backlog tasks, preserving inward dependencies. No empty
-repositories or policy engines are presented as implemented.
+The API retains its bootstrap behavior. Domain models and repository protocols
+are independent of frameworks and storage. Application use cases evaluate and
+record decisions through those protocols. Infrastructure supplies strict JSON
+policy loading, response validation and SQLite storage; `main` composes them for
+the offline workflow. The application does not import Pydantic, HTTP or SQLite.
+There is no gateway interception, review endpoint or automatic content release.
+Decisions are recorded under `docs/adr/`.
 
 OpenAPI follows the existing search-bff pattern: internal /api/v1 paths are
 rendered relative to a configured server. Local server: /api/v1; planned
@@ -69,5 +181,19 @@ See [FastAPI metadata](https://fastapi.tiangolo.com/tutorial/metadata/) and
 Existing Azure work items: AB#221 (PBI), AB#222 (bootstrap),
 AB#223 (workflows/templates) and AB#224 (container configuration).
 Local thesis context and evidence are maintained outside this repository.
-Next: confirm GRS contracts and design decisions, then implement the PDP/PEP
-and policy storage under their existing backlog tasks.
+The local Q&A assessment advances AB#230/231 (policy evaluation and tests).
+Local policy loading and decision snapshots provide partial groundwork for
+AB#217/218/236/237 and AB#258/260. They do not complete the YAML or PostgreSQL
+tasks. Protected review cases advance AB#240/241 locally; the PostgreSQL
+repository, 202 response, request evidence and explanation remain pending.
+Next: authenticated reviewers (AB#248), reviewer decisions and expiry
+(AB#244/245), the agreed audit guarantees, then the PEP. The separate
+rag-service /ask integration remains conditional on contract, data and scope.
+
+## Publication
+
+Sync before starting and push feature branches after their checks pass. Opening
+pull requests, merging and deployment require the owner's approval, because a
+merge to `develop` deploys to staging automatically. See section 9 of
+[the engineering standards](docs/engineering-standards.md). Local thesis
+documents and AGENTS.md stay outside Git.

@@ -1,0 +1,172 @@
+# Engineering standards
+
+These rules apply to every change in governance-service. Organization rules in
+`tech-governance` and the shared PR template take precedence. A deliberate
+deviation from this document needs an Architecture Decision Record (ADR) that
+states the reason, the alternatives and the consequences.
+
+Rules marked **[enforced]** fail an automated check. The others are verified
+during self-review and pull request review.
+
+These rules bind human contributors and AI coding agents alike. Agents read
+this file before changing code. Lint rules, the coverage threshold and the
+architecture test are not relaxed to make a change pass.
+
+## 1. Principles
+
+1. **Fail closed.** If the service cannot evaluate, persist or authorize, the
+   output is denied or retained. It is never released by default.
+2. **Honest limits.** Code, README and contracts describe only behavior that
+   exists and is tested. Planned guarantees are labeled as pending.
+3. **Least data, least privilege.** Store, log and expose the minimum needed
+   for the stated purpose. Access is denied unless a rule allows it.
+4. **Simple before general.** Build what the current requirement needs (KISS,
+   YAGNI). Add an abstraction only when a second real case exists or a port
+   isolates infrastructure.
+5. **Evidence over assertion.** A requirement counts as implemented only when a
+   test reproduces it, including its failure paths.
+
+## 2. Architecture
+
+Clean/Hexagonal layers with the dependency rule:
+
+| Layer | Contains | May import |
+|---|---|---|
+| `app/domain` | Entities, value objects, domain errors, ports (`Protocol`) | Standard library, `app.domain` |
+| `app/application` | Use cases, one public `execute` method each | Standard library, `app.domain`, `app.application` |
+| `app/infrastructure` | Adapters: parsing, storage, HTTP clients | Any layer above, third-party libraries |
+| `app/api` | FastAPI routers and HTTP schemas | Application, domain, infrastructure |
+| `app/main.py` | Composition root: builds adapters and use cases | Everything |
+
+- **[enforced]** Domain and application do not import FastAPI, Pydantic,
+  httpx, SQLite or any other framework or driver (`tests/test_architecture.py`).
+- Domain objects are immutable (`@dataclass(frozen=True)`) and validate their
+  invariants in `__post_init__`.
+- Untrusted input (upstream bodies, files, HTTP requests) is validated once, at
+  the infrastructure or API boundary, before it reaches a use case.
+- Ports are small and owned by the domain. Each port has one production adapter
+  and test doubles where the adapter would make a test slow or nondeterministic.
+- Policy values (thresholds, counts, reasons) come from versioned policy files,
+  not from constants in the evaluator.
+
+## 3. Code
+
+- Python 3.11, English identifiers, `snake_case` functions, `PascalCase`
+  classes, exception names ending in `Error` **[enforced]**.
+- Public functions and methods in `app` have type hints **[enforced]**.
+- Functions do one thing. Prefer early returns over nested conditionals.
+- Raise specific exception types. Never use a bare or blind `except`
+  **[enforced]**. Catch only errors the code can handle, and never swallow an
+  error that could hide data loss.
+- Timestamps are timezone-aware UTC **[enforced]**. Paths use `pathlib`
+  **[enforced]**. No `print` in application code **[enforced]**.
+- No commented-out code **[enforced]**. Comments explain why, not what.
+- No `TODO` without an existing work item reference (`AB#<id>`).
+- Formatting with Black, linting with Ruff, both at line length 88
+  **[enforced]**.
+
+## 4. Security and privacy
+
+- **[enforced]** No hardcoded secrets, `eval`, unsafe deserialization or
+  string-built SQL (Ruff `S` rules). SQL uses parameters only.
+- Secrets live in environment variables. `.env` files stay out of Git; example
+  files contain placeholders.
+- Retained generated content is protected data. It must not appear in logs,
+  exception messages, `repr` output, metrics, general audit queries or public
+  routes.
+- A route that exposes protected content requires authentication and an
+  authorization check. Until both exist, protected content is reachable only
+  from in-process callers, and the README documents that limit.
+- Users are referenced with the identity-decoupled pattern:
+  `<x>_identity_id` plus `<x>_snapshot`, never a foreign key to another service.
+- Tests and demonstrations use synthetic data only. No real user data, model
+  outputs from production or credentials in the repository.
+- Error responses carry a code and a trace ID, not internal details.
+
+## 5. Persistence
+
+- A write that creates related records is one transaction. On failure nothing
+  is stored and the error propagates; the caller never receives a record that
+  was not saved.
+- Audit and decision records are append-only. Corrections are new records.
+- A stored policy version is immutable. Changing content requires a new
+  version.
+- Identifiers are UUIDs generated by the service. Client-supplied IDs are not
+  trusted as primary keys.
+- Schema changes are versioned with the code. A production schema uses
+  migrations in the same pull request.
+- The local SQLite adapter is a prototype. It does not provide the PostgreSQL
+  roles, migrations or integrity model of the planned audit store.
+
+## 6. Testing
+
+- Each behavior has a test for the expected path and for each failure path:
+  invalid input, missing configuration, storage failure, conflicting versions
+  and, where access control exists, denied access.
+- **[enforced]** Total branch coverage is at least 90 %. Domain and
+  application code are expected at 100 %. `pragma: no cover` needs a reason
+  in the same line.
+- Test names describe the behavior and condition, for example
+  `test_storage_failure_leaves_no_partial_record`.
+- Tests follow Arrange-Act-Assert, use `tmp_path` for files and databases, and
+  do not use the network, real clocks for assertions or sleeps.
+- Persistence failures are injected through test doubles or SQLite connection
+  wrappers, then the store is reopened to prove nothing partial remains.
+- `pytest.raises` names a specific exception and, for broad types, a `match`
+  **[enforced]**.
+
+## 7. Dependencies
+
+- Prefer the standard library, then already installed dependencies.
+- A new dependency needs a reason in the pull request, a pinned version in
+  `constraints.txt` and a license compatible with the repository.
+- Development tools are pinned in `requirements-dev.txt`.
+
+## 8. Documentation and decisions
+
+- The README states current behavior, how to run it and its limits.
+- External contracts are versioned under `docs/contracts/`.
+- Architecture decisions are recorded under `docs/adr/NNNN-short-title.md`
+  with the sections: Status, Context, Decision, Alternatives, Consequences.
+  An ADR is superseded by a new ADR, not edited to hide history.
+
+## 9. Git workflow
+
+- Start every session by syncing: `git fetch --prune`, then
+  `git pull --ff-only` on a clean tree. Never pull over uncommitted work. If
+  `origin/develop` moved, bring the feature branch up to date (rebase while
+  unpublished, merge once published) and rerun the checks. Review open issues,
+  pull requests and recent CI runs before editing.
+- Branch from an updated `develop`: `feature/<kebab-slug>`, `chore/<slug>`,
+  `hotfix/<slug>`.
+- Conventional Commits in English, `type(scope): summary`, with the reason in
+  the body. One logical change per commit; tests in the same commit as the
+  behavior they verify.
+- Push a feature branch once its increment passes the checks. Do not
+  force-push a published branch or push directly to `develop` or `main`.
+- Opening a pull request, merging and deploying require the repository owner's
+  approval. A merge to `develop` deploys to staging automatically.
+- Pull requests use the organization template, link their issue with
+  `Closes #<n>` and request review from the CODEOWNERS team. GitHub closes the
+  issue automatically only on merge to `main`; after a merge to `develop`,
+  close it manually once its acceptance criteria hold.
+
+## 10. Definition of done for a code change
+
+A change is done when all of these hold:
+
+1. Ruff, Black and pytest with coverage pass locally, and the commands and
+   tool versions are recorded in the pull request notes.
+2. New behavior has tests for its expected and failure paths.
+3. No protected content, secret or real personal data was added to code,
+   tests, logs or fixtures.
+4. README, contracts and ADRs reflect the change and its limits.
+5. The diff was self-reviewed against sections 2 to 6.
+6. The commit follows section 9, references the work item and is pushed to
+   its feature branch.
+
+```powershell
+python -m ruff check .
+python -m black --check .
+python -m pytest --cov=app --cov-report=term-missing
+```

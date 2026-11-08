@@ -40,7 +40,12 @@ def test_openapi_is_cached_and_excludes_health():
     client = make_client(public_base_path="/api/governance/")
     schema = client.get("/openapi.json").json()
     assert schema["servers"] == [{"url": "/api/governance"}]
-    assert list(schema["paths"]) == ["/status", "/supervisors/me"]
+    assert set(schema["paths"]) == {
+        "/status",
+        "/supervisors/me",
+        "/review-cases/{case_id}",
+        "/review-cases/{case_id}/resolution",
+    }
     assert client.app.openapi() is client.app.openapi()
     assert "/api/v1/status" not in schema["paths"]
 

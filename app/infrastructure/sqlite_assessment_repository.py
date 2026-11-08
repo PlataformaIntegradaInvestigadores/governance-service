@@ -13,6 +13,11 @@ from app.domain.qa import (
     RecordedAssessment,
     Verdict,
 )
+from app.domain.resolution import (
+    ReviewCaseAlreadyResolvedError,
+    ReviewOutcome,
+    ReviewResolution,
+)
 from app.domain.review import (
     RetainedQaContent,
     RetainedQaPair,
@@ -20,6 +25,7 @@ from app.domain.review import (
     ReviewCaseIntegrityError,
     require_review_case_link,
 )
+from app.domain.supervision import Supervisor
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS policies (
@@ -54,6 +60,29 @@ CREATE TRIGGER IF NOT EXISTS review_cases_no_update BEFORE UPDATE ON review_case
 BEGIN SELECT RAISE(ABORT, 'Review cases are append-only'); END;
 CREATE TRIGGER IF NOT EXISTS review_cases_no_delete BEFORE DELETE ON review_cases
 BEGIN SELECT RAISE(ABORT, 'Review cases are append-only'); END;
+CREATE TABLE IF NOT EXISTS review_resolutions (
+    resolution_id TEXT PRIMARY KEY NOT NULL,
+    case_id TEXT NOT NULL UNIQUE REFERENCES review_cases(case_id),
+    outcome TEXT NOT NULL
+        CHECK (outcome IN ('approve', 'modify', 'reject', 'expired')),
+    resolved_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    supervisor_identity_id TEXT,
+    supervisor_snapshot_json TEXT,
+    justification TEXT,
+    modified_content_json TEXT,
+    modified_content_sha256 TEXT,
+    CHECK ((outcome = 'expired') = (supervisor_identity_id IS NULL)),
+    CHECK ((supervisor_identity_id IS NULL) = (supervisor_snapshot_json IS NULL)),
+    CHECK ((outcome = 'modify') = (modified_content_json IS NOT NULL)),
+    CHECK ((modified_content_json IS NULL) = (modified_content_sha256 IS NULL))
+);
+CREATE TRIGGER IF NOT EXISTS review_resolutions_no_update
+BEFORE UPDATE ON review_resolutions
+BEGIN SELECT RAISE(ABORT, 'Review resolutions are append-only'); END;
+CREATE TRIGGER IF NOT EXISTS review_resolutions_no_delete
+BEFORE DELETE ON review_resolutions
+BEGIN SELECT RAISE(ABORT, 'Review resolutions are append-only'); END;
 CREATE TRIGGER IF NOT EXISTS policies_no_update BEFORE UPDATE ON policies
 BEGIN SELECT RAISE(ABORT, 'Policies are append-only'); END;
 CREATE TRIGGER IF NOT EXISTS policies_no_delete BEFORE DELETE ON policies
@@ -84,6 +113,17 @@ def _content_json(content: RetainedQaContent) -> str:
     }
     return json.dumps(
         document, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    )
+
+
+def _read_content(document_json: str) -> RetainedQaContent:
+    document = json.loads(document_json)
+    return RetainedQaContent(
+        tuple(
+            RetainedQaPair(pair["question"], pair["answer"])
+            for pair in document["qa_pairs"]
+        ),
+        tuple(document["source_article_ids"]),
     )
 
 
@@ -179,9 +219,9 @@ class SqliteAssessmentRepository:
 class SqliteReviewCaseRepository:
     """Protected in-process reads of retained content, separate from audit queries.
 
-    shortcut: no authentication or authorization and no encryption at rest; any
-    process with file access can read it. Upgrade with identity validation, a
-    reviewer allowlist and the PostgreSQL store before exposing an API route.
+    HTTP access goes only through the supervisor-protected review routes.
+    shortcut: no encryption at rest; any process with file access can read it.
+    Upgrade with encryption and the PostgreSQL store before real pilot data.
     """
 
     def __init__(self, path: Path) -> None:
@@ -200,16 +240,98 @@ class SqliteReviewCaseRepository:
         case_id, assessment_id, created_at, content, digest = row
         if _sha256(content) != digest:
             raise ReviewCaseIntegrityError("Stored review case digest mismatch")
-        document = json.loads(content)
         return ReviewCase(
             case_id,
             assessment_id,
             datetime.fromisoformat(created_at),
-            RetainedQaContent(
-                tuple(
-                    RetainedQaPair(pair["question"], pair["answer"])
-                    for pair in document["qa_pairs"]
-                ),
-                tuple(document["source_article_ids"]),
-            ),
+            _read_content(content),
+        )
+
+
+class SqliteReviewResolutionRepository:
+    """Final review outcomes; the UNIQUE case_id enforces one per case.
+
+    shortcut: modified content and justifications are stored in clear like the
+    cases; upgrade with encryption at rest and the PostgreSQL store.
+    """
+
+    def __init__(self, path: Path) -> None:
+        self._path = path
+        _initialize(path)
+
+    def save(self, resolution: ReviewResolution) -> None:
+        supervisor = resolution.supervisor
+        content = (
+            _content_json(resolution.modified_content)
+            if resolution.modified_content is not None
+            else None
+        )
+        try:
+            with closing(sqlite3.connect(self._path)) as connection, connection:
+                connection.execute("PRAGMA foreign_keys = ON")
+                connection.execute(
+                    "INSERT INTO review_resolutions VALUES "
+                    "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        resolution.resolution_id,
+                        resolution.case_id,
+                        resolution.outcome.value,
+                        resolution.resolved_at.isoformat(),
+                        resolution.expires_at.isoformat(),
+                        supervisor.identity_id if supervisor else None,
+                        (
+                            json.dumps({"display_name": supervisor.display_name})
+                            if supervisor
+                            else None
+                        ),
+                        resolution.justification,
+                        content,
+                        _sha256(content) if content is not None else None,
+                    ),
+                )
+        except sqlite3.IntegrityError as error:
+            if "review_resolutions.case_id" in str(error):
+                raise ReviewCaseAlreadyResolvedError("Case already resolved") from error
+            raise
+
+    def get(self, case_id: str) -> ReviewResolution | None:
+        with closing(sqlite3.connect(self._path)) as connection:
+            connection.row_factory = sqlite3.Row
+            row = connection.execute(
+                "SELECT * FROM review_resolutions WHERE case_id = ?", (case_id,)
+            ).fetchone()
+        if row is None:
+            return None
+        content = row["modified_content_json"]
+        if content is not None and _sha256(content) != row["modified_content_sha256"]:
+            raise ReviewCaseIntegrityError("Stored resolution digest mismatch")
+        supervisor = None
+        if row["supervisor_identity_id"] is not None:
+            snapshot = json.loads(row["supervisor_snapshot_json"])
+            supervisor = Supervisor(
+                row["supervisor_identity_id"], snapshot["display_name"]
+            )
+        return ReviewResolution(
+            row["resolution_id"],
+            row["case_id"],
+            ReviewOutcome(row["outcome"]),
+            datetime.fromisoformat(row["resolved_at"]),
+            datetime.fromisoformat(row["expires_at"]),
+            supervisor,
+            row["justification"],
+            _read_content(content) if content is not None else None,
+        )
+
+    def pending_case_ids(self, created_before: datetime) -> tuple[str, ...]:
+        with closing(sqlite3.connect(self._path)) as connection:
+            rows = connection.execute(
+                "SELECT c.case_id, c.created_at FROM review_cases c "
+                "LEFT JOIN review_resolutions r ON r.case_id = c.case_id "
+                "WHERE r.case_id IS NULL ORDER BY c.created_at"
+            ).fetchall()
+        # Compared as datetimes: stored ISO strings may differ in offset format.
+        return tuple(
+            case_id
+            for case_id, created_at in rows
+            if datetime.fromisoformat(created_at) < created_before
         )

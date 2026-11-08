@@ -3,7 +3,7 @@
 Service bootstrap for Component E, with offline Q&A assessment, versioned
 experimental policies, transactional local decision storage and protected review
 cases for suspended output. The API exposes
-runtime health, service metadata, OpenAPI and a supervisor identity check.
+runtime health, service metadata, OpenAPI and supervisor-only review routes.
 Interception, approved policies, reviewer decisions, PostgreSQL forensic audit
 and explainability are pending; governance is not enabled for live traffic.
 
@@ -92,12 +92,10 @@ decision and policy snapshot too. A case is append-only, SQLite rejects one for
 a non-suspended decision, and a SHA-256 digest detects altered content on read
 (`ReviewCaseIntegrityError`, whose message has no content).
 
-Limits of this prototype: there is no authentication, authorization or
-encryption at rest, so any process that can open the file can read the content.
-For that reason no HTTP route exposes cases yet; supervisor authentication now
-exists (next section), and a case route will require it. Reviewer decisions, expiry and
-release are not implemented; a case stays pending. Decisions stored before this
-change have `review_case_id = None`. See
+Limits of this prototype: there is no encryption at rest, so any process that
+can open the file can read the content. Over HTTP, cases are reachable only
+through the supervisor-protected review routes described below. Decisions stored
+before this change have `review_case_id = None`. See
 [ADR 0001](docs/adr/0001-protected-review-cases-in-local-store.md).
 
 ## Supervisor authentication
@@ -128,14 +126,14 @@ from pathlib import Path
 from app.application.supervision import ManageSupervisors
 from app.infrastructure.sqlite_supervisor_directory import SqliteSupervisorDirectory
 
-roster = ManageSupervisors(SqliteSupervisorDirectory(Path("local/supervisors.sqlite3")))
+roster = ManageSupervisors(SqliteSupervisorDirectory(Path("local/governance.sqlite3")))
 roster.enable("<identity user ID>", "<display name>")
 roster.disable("<identity user ID>")
 ```
 
-Set `GOVERNANCE_IDENTITY_BASE_URL` and `GOVERNANCE_SUPERVISORS_DATABASE`
-together; setting only one fails at startup, and setting neither leaves the
-route at 503. `GOVERNANCE_IDENTITY_TIMEOUT_SECONDS` bounds each identity call
+Set `GOVERNANCE_IDENTITY_BASE_URL` and `GOVERNANCE_DATABASE` (the local SQLite
+file shared with decisions and cases) together; setting only one fails at
+startup, and setting neither leaves the supervisor and review routes at 503. `GOVERNANCE_IDENTITY_TIMEOUT_SECONDS` bounds each identity call
 (default 3, maximum 30).
 
 Limits: there is no administrator route, and list changes do not record who
@@ -144,6 +142,46 @@ do not enable supervision yet; the read-only container needs a writable volume
 for the list first. If identity restricts `ALLOWED_HOSTS`, it must accept the
 internal host name. See
 [ADR 0002](docs/adr/0002-supervisor-authentication-through-identity.md).
+
+## Review resolutions
+
+An enabled supervisor views a case and resolves it once. Both routes need a
+bearer token accepted by identity and an enabled supervisor (previous section);
+authentication is checked before the case ID or the body.
+
+- `GET /api/v1/review-cases/{case_id}` returns the retained pairs, source IDs,
+  policy version, reason codes, `expires_at`, `status` (`pending`, `expired`,
+  `approve`, `modify` or `reject`) and the resolution, with
+  `Cache-Control: no-store`.
+- `POST /api/v1/review-cases/{case_id}/resolution` takes `outcome`
+  (`approve`, `modify` or `reject`), an optional `justification` (at most 2000
+  characters) and, only for `modify`, the edited `qa_pairs` (1 to 50). Edited
+  pairs keep the case's source IDs. It answers 201 for a new resolution and 200
+  when the same supervisor repeats the same request.
+
+Rules:
+
+- A justification is required to modify, and to approve output flagged
+  `PARTIAL_GENERATION` or `SOURCE_EVIDENCE_INCOMPLETE`: both override the
+  evaluator. Rejecting needs none.
+- A case has one final resolution. Another outcome, or another supervisor,
+  gets 409 `CASE_ALREADY_RESOLVED`.
+- A case expires `GOVERNANCE_REVIEW_WINDOW_MINUTES` after it was opened
+  (default 1440, maximum 10080). A late resolution records the expiry and gets
+  409 `CASE_EXPIRED`; expired output is denied and never released. `GET` reports
+  an overdue case as `expired` without writing. `ReviewCases.expire_overdue()`
+  records expiries for all overdue cases, for a scheduler to call.
+- Resolutions are append-only, with the supervisor stored as `identity_id` plus
+  a display-name snapshot. Modified content carries a SHA-256 digest checked on
+  read.
+- Errors: 404 `CASE_NOT_FOUND`, 422 `JUSTIFICATION_REQUIRED` or
+  `INVALID_REQUEST`. Bodies hold only `code` and `trace_id` and never echo input.
+
+Limits: an approval is recorded, but nothing delivers the output yet. Release to
+the requester needs the PEP and the 202 flow. Views are not audited, there is
+no case list, and no scheduler calls the expiry sweep. The window is a setting,
+not part of the versioned policy. See
+[ADR 0003](docs/adr/0003-final-review-resolutions-with-expiry.md).
 
 ## Local audit limits
 
@@ -214,8 +252,8 @@ are independent of frameworks and storage. Application use cases evaluate and
 record decisions through those protocols. Infrastructure supplies strict JSON
 policy loading, response validation and SQLite storage; `main` composes them for
 the offline workflow. The application does not import Pydantic, HTTP or SQLite.
-`app.api.supervisors` maps authentication errors to responses. There is no
-gateway interception, review endpoint or automatic content release.
+`app.api.errors` maps domain errors to coded responses. There is no gateway
+interception or automatic content release.
 Decisions are recorded under `docs/adr/`.
 
 OpenAPI follows the existing search-bff pattern: internal /api/v1 paths are
@@ -236,8 +274,9 @@ AB#217/218/236/237 and AB#258/260. They do not complete the YAML or PostgreSQL
 tasks. Protected review cases advance AB#240/241 locally; the PostgreSQL
 repository, 202 response, request evidence and explanation remain pending.
 Supervisor authentication and the supervisor list implement AB#248 locally.
-Next: reviewer decisions and expiry (AB#244/245), the agreed audit guarantees,
-then the PEP. The separate
+Review resolutions and expiry advance AB#244/245 and the case view advances
+AB#242. Next: release through the PEP and the 202 response, the agreed audit
+guarantees and PostgreSQL. The separate
 rag-service /ask integration remains conditional on contract, data and scope.
 
 ## Publication

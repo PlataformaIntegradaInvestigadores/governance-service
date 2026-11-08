@@ -33,7 +33,7 @@ service checks the caller itself. Identity has no reviewer role.
   `AUTHENTICATION_REQUIRED`, 403 `SUPERVISOR_NOT_ENABLED`, 503
   `IDENTITY_UNAVAILABLE` or `SUPERVISION_NOT_CONFIGURED`.
 - The route is unavailable until both `GOVERNANCE_IDENTITY_BASE_URL` and
-  `GOVERNANCE_SUPERVISORS_DATABASE` are set. Setting only one fails at startup.
+  `GOVERNANCE_DATABASE` are set. Setting only one fails at startup.
 
 ## Alternatives
 

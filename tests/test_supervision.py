@@ -333,7 +333,7 @@ def test_complete_settings_compose_the_authorizer(tmp_path):
     settings = Settings(
         _env_file=None,
         identity_base_url="http://identity-service:8002",
-        supervisors_database=tmp_path / "supervisors.sqlite3",
+        database=tmp_path / "supervisors.sqlite3",
     )
     assert isinstance(create_supervisor_authorizer(settings), AuthorizeSupervisor)
     assert (tmp_path / "supervisors.sqlite3").exists()
@@ -343,7 +343,7 @@ def test_complete_settings_compose_the_authorizer(tmp_path):
     "overrides",
     [
         {"identity_base_url": "http://identity-service:8002"},
-        {"supervisors_database": "local/supervisors.sqlite3"},
+        {"database": "local/supervisors.sqlite3"},
     ],
 )
 def test_partial_supervision_settings_are_rejected(overrides):

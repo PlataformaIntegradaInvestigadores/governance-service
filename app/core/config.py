@@ -16,7 +16,9 @@ class Settings(BaseSettings):
     # Supervisor routes stay unavailable (503) until both values are configured.
     identity_base_url: AnyHttpUrl | None = None
     identity_timeout_seconds: float = Field(default=3.0, gt=0, le=30)
-    supervisors_database: Path | None = None
+    database: Path | None = None
+    # Pending cases expire, and are denied, after this window.
+    review_window_minutes: int = Field(default=1440, ge=1, le=10080)
 
     @field_validator("public_base_path")
     @classmethod
@@ -32,8 +34,6 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def require_complete_supervision(self) -> "Settings":
-        if (self.identity_base_url is None) != (self.supervisors_database is None):
-            raise ValueError(
-                "Configure identity_base_url and supervisors_database together"
-            )
+        if (self.identity_base_url is None) != (self.database is None):
+            raise ValueError("Configure identity_base_url and database together")
         return self

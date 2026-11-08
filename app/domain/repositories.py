@@ -1,6 +1,8 @@
+from datetime import datetime
 from typing import Protocol
 
 from app.domain.qa import QaPolicy, RecordedAssessment
+from app.domain.resolution import ReviewResolution
 from app.domain.review import ReviewCase
 from app.domain.supervision import Supervisor, SupervisorChange
 
@@ -40,4 +42,18 @@ class SupervisorDirectory(Protocol):
 
     def current(self, identity_id: str) -> Supervisor | None:
         """Return the supervisor only while their latest change enables them."""
+        ...
+
+
+class ReviewResolutionRepository(Protocol):
+    """Final outcomes of review cases; one per case, append-only."""
+
+    def save(self, resolution: ReviewResolution) -> None:
+        """Store it or raise ReviewCaseAlreadyResolvedError if the case has one."""
+        ...
+
+    def get(self, case_id: str) -> ReviewResolution | None: ...
+
+    def pending_case_ids(self, created_before: datetime) -> tuple[str, ...]:
+        """Cases without a resolution that were opened before the given time."""
         ...

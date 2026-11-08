@@ -1,6 +1,7 @@
+from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, field_validator
+from pydantic import AnyHttpUrl, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -12,6 +13,10 @@ class Settings(BaseSettings):
     environment: Literal["local", "staging", "production"] = "local"
     public_base_path: str = "/api/v1"
     port: int = Field(default=8005, ge=1024, le=65535)
+    # Supervisor routes stay unavailable (503) until both values are configured.
+    identity_base_url: AnyHttpUrl | None = None
+    identity_timeout_seconds: float = Field(default=3.0, gt=0, le=30)
+    supervisors_database: Path | None = None
 
     @field_validator("public_base_path")
     @classmethod
@@ -24,3 +29,11 @@ class Settings(BaseSettings):
         ):
             raise ValueError("Use an absolute URL path without query or fragment")
         return value.rstrip("/") or "/"
+
+    @model_validator(mode="after")
+    def require_complete_supervision(self) -> "Settings":
+        if (self.identity_base_url is None) != (self.supervisors_database is None):
+            raise ValueError(
+                "Configure identity_base_url and supervisors_database together"
+            )
+        return self

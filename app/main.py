@@ -6,12 +6,19 @@ from fastapi import FastAPI, Request, Response
 from fastapi.openapi.utils import get_openapi
 
 from app import __version__
+from app.api import supervisors
 from app.api.routes import health_router, router
 from app.application.record_qa_assessment import RecordQaAssessment
+from app.application.supervision import AuthorizeSupervisor
 from app.core.config import Settings
+from app.infrastructure.identity_token_validator import (
+    IdentityTokenValidator,
+    create_identity_client,
+)
 from app.infrastructure.json_policy_repository import JsonPolicyRepository
 from app.infrastructure.qa_response import assess_qa_response, retain_qa_content
 from app.infrastructure.sqlite_assessment_repository import SqliteAssessmentRepository
+from app.infrastructure.sqlite_supervisor_directory import SqliteSupervisorDirectory
 
 
 def create_qa_assessor(policy_path: Path, database_path: Path) -> RecordQaAssessment:
@@ -23,6 +30,18 @@ def create_qa_assessor(policy_path: Path, database_path: Path) -> RecordQaAssess
     )
 
 
+def create_supervisor_authorizer(settings: Settings) -> AuthorizeSupervisor | None:
+    if settings.identity_base_url is None or settings.supervisors_database is None:
+        return None
+    client = create_identity_client(
+        str(settings.identity_base_url), settings.identity_timeout_seconds
+    )
+    return AuthorizeSupervisor(
+        IdentityTokenValidator(client),
+        SqliteSupervisorDirectory(settings.supervisors_database),
+    )
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings if settings is not None else Settings()
     application = FastAPI(
@@ -31,8 +50,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         version=__version__,
     )
     application.state.settings = settings
+    application.state.authorize_supervisor = create_supervisor_authorizer(settings)
     application.include_router(health_router)
     application.include_router(router, prefix="/api/v1")
+    application.include_router(supervisors.router, prefix="/api/v1")
+    supervisors.register_error_handlers(application)
 
     @application.middleware("http")
     async def add_trace_id(

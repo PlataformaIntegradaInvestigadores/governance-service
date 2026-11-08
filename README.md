@@ -3,9 +3,9 @@
 Service bootstrap for Component E, with offline Q&A assessment, versioned
 experimental policies, transactional local decision storage and protected review
 cases for suspended output. The API exposes
-runtime health, service metadata and OpenAPI. Interception, approved policies,
-human review, PostgreSQL forensic audit and explainability are pending;
-governance is not enabled for live traffic.
+runtime health, service metadata, OpenAPI and a supervisor identity check.
+Interception, approved policies, reviewer decisions, PostgreSQL forensic audit
+and explainability are pending; governance is not enabled for live traffic.
 
 ## Local Q&A assessment
 
@@ -94,10 +94,58 @@ a non-suspended decision, and a SHA-256 digest detects altered content on read
 
 Limits of this prototype: there is no authentication, authorization or
 encryption at rest, so any process that can open the file can read the content.
-For that reason no HTTP route exposes cases. Reviewer decisions, expiry and
+For that reason no HTTP route exposes cases yet; supervisor authentication now
+exists (next section), and a case route will require it. Reviewer decisions, expiry and
 release are not implemented; a case stays pending. Decisions stored before this
 change have `review_case_id = None`. See
 [ADR 0001](docs/adr/0001-protected-review-cases-in-local-store.md).
+
+## Supervisor authentication
+
+Only enabled supervisors may act on review cases. `GET /api/v1/supervisors/me`
+checks the caller and returns their supervisor entry; it returns no review
+content. The service sends the bearer token to identity-service
+(`/internal/auth/validate-token/`) on every request and never verifies JWTs
+itself: identity signs them with a shared key that this service must not hold.
+
+| Result | Status | `code` |
+|---|---|---|
+| Missing, malformed or rejected token, or a refresh token | 401 | `AUTHENTICATION_REQUIRED` |
+| Valid user who is not an enabled supervisor | 403 | `SUPERVISOR_NOT_ENABLED` |
+| Identity unreachable, timed out or answering unexpectedly | 503 | `IDENTITY_UNAVAILABLE` |
+| Supervision not configured | 503 | `SUPERVISION_NOT_CONFIGURED` |
+
+Error bodies hold only `code` and `trace_id`. The token is not stored, logged or
+included in error messages.
+
+The supervisor list belongs to governance. Each change appends a row with the
+identity ID, the display name recorded as its snapshot, the enabled flag and
+the UTC time; the latest change per identity decides. Manage it in process:
+
+```python
+from pathlib import Path
+
+from app.application.supervision import ManageSupervisors
+from app.infrastructure.sqlite_supervisor_directory import SqliteSupervisorDirectory
+
+roster = ManageSupervisors(SqliteSupervisorDirectory(Path("local/supervisors.sqlite3")))
+roster.enable("<identity user ID>", "<display name>")
+roster.disable("<identity user ID>")
+```
+
+Set `GOVERNANCE_IDENTITY_BASE_URL` and `GOVERNANCE_SUPERVISORS_DATABASE`
+together; setting only one fails at startup, and setting neither leaves the
+route at 503. `GOVERNANCE_IDENTITY_TIMEOUT_SECONDS` bounds each identity call
+(default 3, maximum 30).
+
+Limits: there is no administrator route, and list changes do not record who
+made them. A token stays valid until identity rejects it. Deployed environments
+do not enable supervision yet; the read-only container needs a writable volume
+for the list first. If identity restricts `ALLOWED_HOSTS`, it must accept the
+internal host name. See
+[ADR 0002](docs/adr/0002-supervisor-authentication-through-identity.md).
+
+## Local audit limits
 
 Local triggers reject updates and deletes; a policy snapshot checksum detects
 inconsistent content when read. A database file owner can replace records or
@@ -166,7 +214,8 @@ are independent of frameworks and storage. Application use cases evaluate and
 record decisions through those protocols. Infrastructure supplies strict JSON
 policy loading, response validation and SQLite storage; `main` composes them for
 the offline workflow. The application does not import Pydantic, HTTP or SQLite.
-There is no gateway interception, review endpoint or automatic content release.
+`app.api.supervisors` maps authentication errors to responses. There is no
+gateway interception, review endpoint or automatic content release.
 Decisions are recorded under `docs/adr/`.
 
 OpenAPI follows the existing search-bff pattern: internal /api/v1 paths are
@@ -186,8 +235,9 @@ Local policy loading and decision snapshots provide partial groundwork for
 AB#217/218/236/237 and AB#258/260. They do not complete the YAML or PostgreSQL
 tasks. Protected review cases advance AB#240/241 locally; the PostgreSQL
 repository, 202 response, request evidence and explanation remain pending.
-Next: authenticated reviewers (AB#248), reviewer decisions and expiry
-(AB#244/245), the agreed audit guarantees, then the PEP. The separate
+Supervisor authentication and the supervisor list implement AB#248 locally.
+Next: reviewer decisions and expiry (AB#244/245), the agreed audit guarantees,
+then the PEP. The separate
 rag-service /ask integration remains conditional on contract, data and scope.
 
 ## Publication

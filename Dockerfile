@@ -12,6 +12,7 @@ WORKDIR /app
 COPY requirements.txt constraints.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 COPY --chown=appuser:appuser app ./app
+COPY --chown=appuser:appuser policies ./policies
 
 USER appuser
 EXPOSE 8005

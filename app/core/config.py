@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Literal
 
-from pydantic import AnyHttpUrl, Field, field_validator, model_validator
+from pydantic import AnyHttpUrl, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -19,6 +19,23 @@ class Settings(BaseSettings):
     database: Path | None = None
     # Pending cases expire, and are denied, after this window.
     review_window_minutes: int = Field(default=1440, ge=1, le=10080)
+    qa_upstream_base_url: AnyHttpUrl | None = None
+    qa_timeout_seconds: float = Field(default=30.0, gt=0, le=120)
+    qa_policy_path: Path = Path("policies/search-qa-review.draft-1.json")
+    qa_release_key: SecretStr | None = Field(default=None, min_length=32)
+
+    @field_validator("qa_upstream_base_url")
+    @classmethod
+    def validate_qa_origin(cls, value: AnyHttpUrl | None) -> AnyHttpUrl | None:
+        if value is not None and (
+            value.path not in ("", "/", None)
+            or value.query is not None
+            or value.fragment is not None
+            or value.username is not None
+            or value.password is not None
+        ):
+            raise ValueError("Configure an upstream origin without credentials or path")
+        return value
 
     @field_validator("public_base_path")
     @classmethod
@@ -36,4 +53,8 @@ class Settings(BaseSettings):
     def require_complete_supervision(self) -> "Settings":
         if (self.identity_base_url is None) != (self.database is None):
             raise ValueError("Configure identity_base_url and database together")
+        if self.qa_upstream_base_url is not None and (
+            self.database is None or self.qa_release_key is None
+        ):
+            raise ValueError("Governed Q&A requires supervision and a release key")
         return self

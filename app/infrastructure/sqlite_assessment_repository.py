@@ -27,7 +27,31 @@ from app.domain.review import (
 )
 from app.domain.supervision import Supervisor
 
-_SCHEMA = """
+_ASSESSMENTS = """
+CREATE TABLE IF NOT EXISTS assessments (
+    assessment_id TEXT PRIMARY KEY NOT NULL,
+    created_at TEXT NOT NULL,
+    policy_id TEXT NOT NULL,
+    policy_version TEXT NOT NULL,
+    verdict TEXT NOT NULL CHECK (verdict IN ('deny', 'suspend', 'allow')),
+    reason_codes_json TEXT NOT NULL,
+    FOREIGN KEY (policy_id, policy_version) REFERENCES policies(policy_id, version)
+);
+"""
+_CASE_GUARD = """
+CREATE TRIGGER IF NOT EXISTS review_cases_need_suspension
+BEFORE INSERT ON review_cases
+WHEN (SELECT verdict FROM assessments WHERE assessment_id = NEW.assessment_id)
+     IS NOT 'suspend'
+BEGIN SELECT RAISE(ABORT, 'Review cases require a suspended assessment'); END;
+"""
+_ASSESSMENT_GUARDS = (
+    """CREATE TRIGGER IF NOT EXISTS assessments_no_update BEFORE UPDATE ON assessments
+       BEGIN SELECT RAISE(ABORT, 'Assessments are append-only'); END;""",
+    """CREATE TRIGGER IF NOT EXISTS assessments_no_delete BEFORE DELETE ON assessments
+       BEGIN SELECT RAISE(ABORT, 'Assessments are append-only'); END;""",
+)
+_SCHEMA = f"""
 CREATE TABLE IF NOT EXISTS policies (
     policy_id TEXT NOT NULL,
     version TEXT NOT NULL,
@@ -35,15 +59,7 @@ CREATE TABLE IF NOT EXISTS policies (
     sha256 TEXT NOT NULL,
     PRIMARY KEY (policy_id, version)
 );
-CREATE TABLE IF NOT EXISTS assessments (
-    assessment_id TEXT PRIMARY KEY NOT NULL,
-    created_at TEXT NOT NULL,
-    policy_id TEXT NOT NULL,
-    policy_version TEXT NOT NULL,
-    verdict TEXT NOT NULL CHECK (verdict IN ('deny', 'suspend')),
-    reason_codes_json TEXT NOT NULL,
-    FOREIGN KEY (policy_id, policy_version) REFERENCES policies(policy_id, version)
-);
+{_ASSESSMENTS}
 CREATE TABLE IF NOT EXISTS review_cases (
     case_id TEXT PRIMARY KEY NOT NULL,
     assessment_id TEXT NOT NULL UNIQUE REFERENCES assessments(assessment_id),
@@ -51,11 +67,7 @@ CREATE TABLE IF NOT EXISTS review_cases (
     content_json TEXT NOT NULL,
     content_sha256 TEXT NOT NULL
 );
-CREATE TRIGGER IF NOT EXISTS review_cases_need_suspension
-BEFORE INSERT ON review_cases
-WHEN (SELECT verdict FROM assessments WHERE assessment_id = NEW.assessment_id)
-     IS NOT 'suspend'
-BEGIN SELECT RAISE(ABORT, 'Review cases require a suspended assessment'); END;
+{_CASE_GUARD}
 CREATE TRIGGER IF NOT EXISTS review_cases_no_update BEFORE UPDATE ON review_cases
 BEGIN SELECT RAISE(ABORT, 'Review cases are append-only'); END;
 CREATE TRIGGER IF NOT EXISTS review_cases_no_delete BEFORE DELETE ON review_cases
@@ -87,16 +99,35 @@ CREATE TRIGGER IF NOT EXISTS policies_no_update BEFORE UPDATE ON policies
 BEGIN SELECT RAISE(ABORT, 'Policies are append-only'); END;
 CREATE TRIGGER IF NOT EXISTS policies_no_delete BEFORE DELETE ON policies
 BEGIN SELECT RAISE(ABORT, 'Policies are append-only'); END;
-CREATE TRIGGER IF NOT EXISTS assessments_no_update BEFORE UPDATE ON assessments
-BEGIN SELECT RAISE(ABORT, 'Assessments are append-only'); END;
-CREATE TRIGGER IF NOT EXISTS assessments_no_delete BEFORE DELETE ON assessments
-BEGIN SELECT RAISE(ABORT, 'Assessments are append-only'); END;
+{''.join(_ASSESSMENT_GUARDS)}
 """
 
 
 def _initialize(path: Path) -> None:
-    with closing(sqlite3.connect(path)) as connection:
+    with closing(sqlite3.connect(path)) as connection, connection:
         connection.executescript(_SCHEMA)
+        connection.execute("BEGIN IMMEDIATE")
+        (schema,) = connection.execute(
+            "SELECT sql FROM sqlite_schema "
+            "WHERE type = 'table' AND name = 'assessments'"
+        ).fetchone()
+        if "'allow'" not in schema:
+            _migrate_assessment_verdicts(connection)
+
+
+def _migrate_assessment_verdicts(connection: sqlite3.Connection) -> None:
+    # Keep review_cases' FK pointed at the original table name during the rebuild.
+    connection.execute("PRAGMA legacy_alter_table = ON")
+    connection.execute("DROP TRIGGER review_cases_need_suspension")
+    connection.execute("ALTER TABLE assessments RENAME TO assessments_previous")
+    connection.execute(_ASSESSMENTS)
+    connection.execute("INSERT INTO assessments SELECT * FROM assessments_previous")
+    connection.execute("DROP TABLE assessments_previous")
+    connection.execute(_CASE_GUARD)
+    for statement in _ASSESSMENT_GUARDS:
+        connection.execute(statement)
+    if connection.execute("PRAGMA foreign_key_check").fetchone() is not None:
+        raise sqlite3.IntegrityError("Assessment migration failed foreign key check")
 
 
 def _sha256(text: str) -> str:
@@ -146,7 +177,11 @@ class SqliteAssessmentRepository:
             policy.version,
         ):
             raise ValueError("Assessment and policy identities must match")
-        snapshot = json.dumps(asdict(policy), sort_keys=True, separators=(",", ":"))
+        policy_fields = asdict(policy)
+        if not policy.allow_complete:
+            # Keep existing review-only snapshots byte-for-byte compatible.
+            del policy_fields["allow_complete"]
+        snapshot = json.dumps(policy_fields, sort_keys=True, separators=(",", ":"))
         digest = _sha256(snapshot)
         with closing(sqlite3.connect(self._path)) as connection, connection:
             connection.execute("PRAGMA foreign_keys = ON")

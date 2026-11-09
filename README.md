@@ -4,8 +4,29 @@ Service bootstrap for Component E, with offline Q&A assessment, versioned
 experimental policies, transactional local decision storage and protected review
 cases for suspended output. The API exposes
 runtime health, service metadata, OpenAPI and supervisor-only review routes.
-Interception, approved policies, reviewer decisions, PostgreSQL forensic audit
-and explainability are pending; governance is not enabled for live traffic.
+The optional Q&A proxy governs requests sent to its own route. Gateway and
+frontend integration, approved policies and PostgreSQL forensic audit are pending.
+
+## Governed Q&A
+
+Configure supervision, then set `GOVERNANCE_QA_UPSTREAM_BASE_URL` to the
+search-service origin and `GOVERNANCE_QA_RELEASE_KEY` to a stable random
+secret of at least 32 characters. Use the same key on every instance.
+`GOVERNANCE_QA_POLICY_PATH` defaults to the bundled review-only policy.
+`GOVERNANCE_QA_TIMEOUT_SECONDS` sets the httpx phase timeouts.
+
+Send the assistant's JSON request to `POST /api/v1/governed/qa/generate`.
+A suspension returns 202 with `review_id` and `review_token`. Poll
+`GET /api/v1/governed/qa/reviews/{review_id}` with the review token as the
+Bearer credential. Pending reviews return 202. Approval or modification
+returns 200 with the authorized pairs and source IDs. Rejection, expiry
+or invalid credentials return 403. Keep the token out of logs and URLs.
+Use TLS at the public boundary.
+
+A policy version with `allow_complete: true` can allow a complete response
+directly. Upstream failures and invalid responses return 403. See the
+[Q&A contract](docs/contracts/search-generate-qa.v1.md) and
+[ADR 0004](docs/adr/0004-governed-qa-policy-enforcement.md).
 
 ## Local Q&A assessment
 
@@ -35,7 +56,7 @@ an experimental local policy, not an approved institutional threshold.
 This function is not an HTTP gate or a persisted review. Calling it neither
 releases content nor creates an audit event. HTTP status alone must not be
 used to interpret generation success; the upstream can return errors in a 200
-body. There is no automatic allow path in this increment.
+body.
 
 ## Versioned local assessments
 
@@ -177,8 +198,8 @@ Rules:
 - Errors: 404 `CASE_NOT_FOUND`, 422 `JUSTIFICATION_REQUIRED` or
   `INVALID_REQUEST`. Bodies hold only `code` and `trace_id` and never echo input.
 
-Limits: an approval is recorded, but nothing delivers the output yet. Release to
-the requester needs the PEP and the 202 flow. Views are not audited, there is
+The governed polling route delivers the authorized output to the holder of
+the review credential. Views are not audited, there is
 no case list, and no scheduler calls the expiry sweep. The window is a setting,
 not part of the versioned policy. See
 [ADR 0003](docs/adr/0003-final-review-resolutions-with-expiry.md).
@@ -247,7 +268,7 @@ only. No database or upstream connection is needed for this increment.
 
 ## Architecture
 
-The API retains its bootstrap behavior. Domain models and repository protocols
+The default configuration leaves governed Q&A disabled. Domain models and repository protocols
 are independent of frameworks and storage. Application use cases evaluate and
 record decisions through those protocols. Infrastructure supplies strict JSON
 policy loading, response validation and SQLite storage; `main` composes them for

@@ -5,11 +5,11 @@ from dataclasses import asdict, replace
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
 from app.application.resolve_review import ReviewCases
-from app.application.supervision import AuthorizeSupervisor, ManageSupervisors
 from app.core.config import Settings
 from app.domain.qa import Assessment, QaPolicy, RecordedAssessment, Verdict
 from app.domain.resolution import (
@@ -27,13 +27,12 @@ from app.domain.review import (
     ReviewCase,
     ReviewCaseIntegrityError,
 )
-from app.domain.supervision import Supervisor
+from app.domain.supervision import ADMIN_SUPERVISOR, Supervisor
 from app.infrastructure.sqlite_assessment_repository import (
     SqliteAssessmentRepository,
     SqliteReviewCaseRepository,
     SqliteReviewResolutionRepository,
 )
-from app.infrastructure.sqlite_supervisor_directory import SqliteSupervisorDirectory
 from app.main import create_app, create_qa_assessor, create_review_cases
 
 WINDOW = timedelta(hours=24)
@@ -350,7 +349,7 @@ def test_default_clock_is_used_by_the_composed_workflow(assess, tmp_path, databa
     record = assess(payload())
     settings = Settings(
         _env_file=None,
-        identity_base_url="http://identity-service:8002",
+        admin_verifier_base_url="http://search.test",
         database=database,
     )
     assert not create_review_cases(settings).view(record.review_case_id).expired
@@ -498,26 +497,19 @@ def test_tampered_modified_content_is_detected(assess, reviews, database):
 # HTTP routes
 
 
-class FakeTokens:
-    def __init__(self):
-        self.identity_id = ANA.identity_id
-
-    def validate(self, token):
-        return self.identity_id
+VERIFIER_URL = "http://search.test/internal/auth/validate-admin-token/"
+AUTH = {"X-Admin-Token": TOKEN}
 
 
 @pytest.fixture
-def api(database, reviews):
-    directory = SqliteSupervisorDirectory(database)
-    ManageSupervisors(directory).enable(ANA.identity_id, ANA.display_name)
-    application = create_app(Settings(_env_file=None))
-    tokens = FakeTokens()
-    application.state.authorize_supervisor = AuthorizeSupervisor(tokens, directory)
+def api(database, reviews, respx_mock):
+    settings = Settings(
+        _env_file=None, admin_verifier_base_url="http://search.test", database=database
+    )
+    application = create_app(settings)
     application.state.review_cases = reviews
-    return TestClient(application), tokens
-
-
-AUTH = {"Authorization": f"Bearer {TOKEN}"}
+    verifier = respx_mock.get(VERIFIER_URL).respond(204)
+    return TestClient(application), verifier
 
 
 def assert_error(response, status_code, code):
@@ -525,17 +517,57 @@ def assert_error(response, status_code, code):
     assert response.json() == {"code": code, "trace_id": response.headers["X-Trace-ID"]}
 
 
-def test_case_view_requires_an_enabled_supervisor(api, assess):
-    client, tokens = api
+@pytest.mark.parametrize(
+    ("upstream", "status", "code"),
+    [
+        (403, 403, "ADMIN_TOKEN_REJECTED"),
+        (302, 503, "ADMIN_VERIFIER_UNAVAILABLE"),
+        (200, 503, "ADMIN_VERIFIER_UNAVAILABLE"),
+        (None, 503, "ADMIN_VERIFIER_UNAVAILABLE"),
+    ],
+)
+def test_failed_admin_validation_denies_read_and_write(
+    api, assess, database, upstream, status, code
+):
+    client, verifier = api
     case_id = assess(payload()).review_case_id
+    if upstream is None:
+        verifier.mock(side_effect=httpx.ConnectError("Synthetic connection failure"))
+    else:
+        verifier.respond(upstream, headers={"Location": "http://elsewhere.test/"})
+    url = f"/api/v1/review-cases/{case_id}"
+    for denied in (
+        client.get(url, headers=AUTH),
+        client.post(f"{url}/resolution", json={"outcome": "reject"}, headers=AUTH),
+    ):
+        assert_error(denied, status, code)
+        assert denied.headers["Cache-Control"] == "no-store"
+        assert RETAINED_ANSWER not in denied.text
+        assert TOKEN not in denied.text
+    assert verifier.call_count == 2
+    assert count_resolutions(database) == 0
 
-    assert_error(
-        client.get(f"/api/v1/review-cases/{case_id}"), 401, "AUTHENTICATION_REQUIRED"
+
+def test_admin_can_read_historical_attribution_after_reopening(api, assess, reviews):
+    client, _ = api
+    case_id = assess(payload()).review_case_id
+    historical = reviews.resolve(case_id, ANA, ReviewOutcome.REJECT).resolution
+    settings = client.app.state.settings
+    reopened = TestClient(create_app(settings))
+    url = f"/api/v1/review-cases/{case_id}"
+    response = reopened.get(url, headers=AUTH)
+    assert response.status_code == 200
+    assert response.json()["resolution"]["supervisor"] == {
+        "identity_id": ANA.identity_id,
+        "display_name": ANA.display_name,
+    }
+    assert response.json()["resolution"]["resolution_id"] == historical.resolution_id
+    assert (
+        reopened.post(
+            f"{url}/resolution", json={"outcome": "reject"}, headers=AUTH
+        ).status_code
+        == 409
     )
-    tokens.identity_id = LUIS.identity_id
-    denied = client.get(f"/api/v1/review-cases/{case_id}", headers=AUTH)
-    assert_error(denied, 403, "SUPERVISOR_NOT_ENABLED")
-    assert RETAINED_ANSWER not in denied.text
 
 
 def test_unauthenticated_callers_cannot_probe_case_ids(api):
@@ -588,8 +620,8 @@ def test_resolution_route_creates_then_replays(api, assess, caplog):
     assert created.status_code == 201
     assert created.headers["Cache-Control"] == "no-store"
     assert created.json()["supervisor"] == {
-        "identity_id": ANA.identity_id,
-        "display_name": ANA.display_name,
+        "identity_id": ADMIN_SUPERVISOR.identity_id,
+        "display_name": ADMIN_SUPERVISOR.display_name,
     }
     assert replayed.status_code == 200
     assert replayed.json() == created.json()
@@ -678,11 +710,10 @@ def test_authentication_is_checked_before_the_body(api, assess):
     assert_error(response, 401, "AUTHENTICATION_REQUIRED")
 
 
-def test_review_routes_are_unavailable_until_configured():
-    client = TestClient(create_app(Settings(_env_file=None)))
-    client.app.state.authorize_supervisor = AuthorizeSupervisor(
-        FakeTokens(), type("Directory", (), {"current": lambda self, _id: ANA})()
-    )
+def test_review_routes_are_unavailable_without_a_database(respx_mock):
+    settings = Settings(_env_file=None, admin_verifier_base_url="http://search.test")
+    client = TestClient(create_app(settings))
+    respx_mock.get(VERIFIER_URL).respond(204)
     response = client.get("/api/v1/review-cases/any", headers=AUTH)
     assert_error(response, 503, "SUPERVISION_NOT_CONFIGURED")
 
@@ -691,7 +722,7 @@ def test_settings_compose_the_review_workflow(tmp_path):
     database = tmp_path / "governance.sqlite3"
     configured = Settings(
         _env_file=None,
-        identity_base_url="http://identity-service:8002",
+        admin_verifier_base_url="http://search.test",
         database=database,
         review_window_minutes=30,
     )

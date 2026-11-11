@@ -82,10 +82,8 @@ def _resolution(resolution: ReviewResolution) -> dict:
     }
 
 
-@router.get("/{case_id}")
-def view_case(
-    case_id: str, supervisor: _Supervisor, reviews: _Reviews, response: Response
-) -> dict:
+@router.get("/{case_id}", dependencies=[Depends(current_supervisor)])
+def view_case(case_id: str, reviews: _Reviews, response: Response) -> dict:
     view = reviews.view(case_id)
     response.headers.update(_NO_STORE)
     if view.resolution is not None:
@@ -118,7 +116,7 @@ def view_case(
 def resolve_case(
     case_id: str,
     body: ResolutionRequest,
-    supervisor: _Supervisor,
+    admin: _Supervisor,
     reviews: _Reviews,
     response: Response,
 ) -> dict:
@@ -128,7 +126,7 @@ def resolve_case(
         else None
     )
     result = reviews.resolve(
-        case_id, supervisor, ReviewOutcome(body.outcome), body.justification, pairs
+        case_id, admin, ReviewOutcome(body.outcome), body.justification, pairs
     )
     response.status_code = 201 if result.created else 200
     response.headers.update(_NO_STORE)

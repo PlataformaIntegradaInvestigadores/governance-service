@@ -119,56 +119,29 @@ through the supervisor-protected review routes described below. Decisions stored
 before this change have `review_case_id = None`. See
 [ADR 0001](docs/adr/0001-protected-review-cases-in-local-store.md).
 
-## Supervisor authentication
+## Administrator authentication
 
-Only enabled supervisors may act on review cases. `GET /api/v1/supervisors/me`
-checks the caller and returns their supervisor entry; it returns no review
-content. The service sends the bearer token to identity-service
-(`/internal/auth/validate-token/`) on every request and never verifies JWTs
-itself: identity signs them with a shared key that this service must not hold.
+`GET /api/v1/supervisors/me` checks `X-Admin-Token` and returns
+`{"role": "admin"}`. Governance sends the token to
+`GET /internal/auth/validate-admin-token/` on the configured search-service
+origin for every protected request. Only 204 authorizes access.
 
 | Result | Status | `code` |
 |---|---|---|
-| Missing, malformed or rejected token, or a refresh token | 401 | `AUTHENTICATION_REQUIRED` |
-| Valid user who is not an enabled supervisor | 403 | `SUPERVISOR_NOT_ENABLED` |
-| Identity unreachable, timed out or answering unexpectedly | 503 | `IDENTITY_UNAVAILABLE` |
-| Supervision not configured | 503 | `SUPERVISION_NOT_CONFIGURED` |
+| Missing admin header | 401 | `AUTHENTICATION_REQUIRED` |
+| Invalid or rejected admin token | 403 | `ADMIN_TOKEN_REJECTED` |
+| Verifier unreachable, timed out or answering unexpectedly | 503 | `ADMIN_VERIFIER_UNAVAILABLE` |
+| Verifier or review database missing for the operation | 503 | `SUPERVISION_NOT_CONFIGURED` |
 
-Error bodies hold only `code` and `trace_id`. The token is not stored, logged or
-included in error messages.
-
-The supervisor list belongs to governance. Each change appends a row with the
-identity ID, the display name recorded as its snapshot, the enabled flag and
-the UTC time; the latest change per identity decides. Manage it in process:
-
-```python
-from pathlib import Path
-
-from app.application.supervision import ManageSupervisors
-from app.infrastructure.sqlite_supervisor_directory import SqliteSupervisorDirectory
-
-roster = ManageSupervisors(SqliteSupervisorDirectory(Path("local/governance.sqlite3")))
-roster.enable("<identity user ID>", "<display name>")
-roster.disable("<identity user ID>")
-```
-
-Set `GOVERNANCE_IDENTITY_BASE_URL` and `GOVERNANCE_DATABASE` (the local SQLite
-file shared with decisions and cases) together; setting only one fails at
-startup, and setting neither leaves the supervisor and review routes at 503. `GOVERNANCE_IDENTITY_TIMEOUT_SECONDS` bounds each identity call
-(default 3, maximum 30).
-
-Limits: there is no administrator route, and list changes do not record who
-made them. A token stays valid until identity rejects it. Deployed environments
-do not enable supervision yet; the read-only container needs a writable volume
-for the list first. If identity restricts `ALLOWED_HOSTS`, it must accept the
-internal host name. See
-[ADR 0002](docs/adr/0002-supervisor-authentication-through-identity.md).
+Set `GOVERNANCE_ADMIN_VERIFIER_BASE_URL` to the internal search-service origin.
+`GOVERNANCE_ADMIN_VERIFIER_TIMEOUT_SECONDS` defaults to 3 and is capped at 30.
+Review cases also require a writable SQLite file at `GOVERNANCE_DATABASE`.
+See [ADR 0005](docs/adr/0005-supervision-through-admin-token.md).
 
 ## Review resolutions
 
-An enabled supervisor views a case and resolves it once. Both routes need a
-bearer token accepted by identity and an enabled supervisor (previous section);
-authentication is checked before the case ID or the body.
+The administrator can view and resolve a case. Both routes validate
+`X-Admin-Token` before reading the case or recording a resolution.
 
 - `GET /api/v1/review-cases/{case_id}` returns the retained pairs, source IDs,
   policy version, reason codes, `expires_at`, `status` (`pending`, `expired`,
@@ -178,7 +151,7 @@ authentication is checked before the case ID or the body.
   (`approve`, `modify` or `reject`), an optional `justification` (at most 2000
   characters) and, only for `modify`, the edited `qa_pairs` (1 to 50). Edited
   pairs keep the case's source IDs. It answers 201 for a new resolution and 200
-  when the same supervisor repeats the same request.
+  when the administrator repeats the same request.
 
 Rules:
 
@@ -192,9 +165,10 @@ Rules:
   409 `CASE_EXPIRED`; expired output is denied and never released. `GET` reports
   an overdue case as `expired` without writing. `ReviewCases.expire_overdue()`
   records expiries for all overdue cases, for a scheduler to call.
-- Resolutions are append-only, with the supervisor stored as `identity_id` plus
-  a display-name snapshot. Modified content carries a SHA-256 digest checked on
-  read.
+- Resolutions are append-only. New human decisions store the fixed `admin`
+  role in both actor fields. Historical resolutions keep their recorded ID and
+  display-name snapshot. Expiry records have no human actor. Modified content
+  carries a SHA-256 digest checked on read.
 - Errors: 404 `CASE_NOT_FOUND`, 422 `JUSTIFICATION_REQUIRED` or
   `INVALID_REQUEST`. Bodies hold only `code` and `trace_id` and never echo input.
 
@@ -294,7 +268,7 @@ Local policy loading and decision snapshots provide partial groundwork for
 AB#217/218/236/237 and AB#258/260. They do not complete the YAML or PostgreSQL
 tasks. Protected review cases advance AB#240/241 locally; the PostgreSQL
 repository, 202 response, request evidence and explanation remain pending.
-Supervisor authentication and the supervisor list implement AB#248 locally.
+Administrator token verification implements AB#248 locally.
 Review resolutions and expiry advance AB#244/245 and the case view advances
 AB#242. Next: release through the PEP and the 202 response, the agreed audit
 guarantees and PostgreSQL. The separate

@@ -14,9 +14,9 @@ from app.application.record_qa_assessment import RecordQaAssessment
 from app.application.resolve_review import ReviewCases
 from app.application.supervision import AuthorizeSupervisor
 from app.core.config import Settings
-from app.infrastructure.identity_token_validator import (
-    IdentityTokenValidator,
-    create_identity_client,
+from app.infrastructure.admin_token_validator import (
+    SearchAdminTokenValidator,
+    create_admin_client,
 )
 from app.infrastructure.json_policy_repository import JsonPolicyRepository
 from app.infrastructure.qa_response import assess_qa_response, retain_qa_content
@@ -26,7 +26,6 @@ from app.infrastructure.sqlite_assessment_repository import (
     SqliteReviewCaseRepository,
     SqliteReviewResolutionRepository,
 )
-from app.infrastructure.sqlite_supervisor_directory import SqliteSupervisorDirectory
 
 
 def create_qa_assessor(policy_path: Path, database_path: Path) -> RecordQaAssessment:
@@ -39,15 +38,12 @@ def create_qa_assessor(policy_path: Path, database_path: Path) -> RecordQaAssess
 
 
 def create_supervisor_authorizer(settings: Settings) -> AuthorizeSupervisor | None:
-    if settings.identity_base_url is None or settings.database is None:
+    if settings.admin_verifier_base_url is None:
         return None
-    client = create_identity_client(
-        str(settings.identity_base_url), settings.identity_timeout_seconds
+    client = create_admin_client(
+        str(settings.admin_verifier_base_url), settings.admin_verifier_timeout_seconds
     )
-    return AuthorizeSupervisor(
-        IdentityTokenValidator(client),
-        SqliteSupervisorDirectory(settings.database),
-    )
+    return AuthorizeSupervisor(SearchAdminTokenValidator(client))
 
 
 def create_review_cases(settings: Settings) -> ReviewCases | None:

@@ -1,6 +1,7 @@
 # ADR 0002: Supervisor authentication through identity-service
 
-Status: Accepted for the local prototype, 2026-11-08.
+Status: Superseded by [ADR 0005](0005-supervision-through-admin-token.md).
+Originally accepted for the local prototype on 2026-11-08.
 
 ## Context
 

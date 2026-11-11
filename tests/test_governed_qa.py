@@ -7,12 +7,10 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
-from app.application.supervision import ManageSupervisors
 from app.core.config import Settings
 from app.domain.qa import QaPolicy
 from app.domain.resolution import ReviewOutcome
 from app.infrastructure.sqlite_assessment_repository import _SCHEMA
-from app.infrastructure.sqlite_supervisor_directory import SqliteSupervisorDirectory
 from app.main import create_app, create_qa_assessor
 
 _GENERATE = "/api/v1/governed/qa/generate"
@@ -35,7 +33,7 @@ def settings(tmp_path):
     )
     return Settings(
         _env_file=None,
-        identity_base_url="http://identity.test",
+        admin_verifier_base_url="http://search.test",
         database=tmp_path / "governance.sqlite3",
         qa_upstream_base_url="http://search.test",
         qa_timeout_seconds=2,
@@ -108,20 +106,14 @@ def test_review_is_private_and_only_authorized_resolution_releases(
             ]
         resolution_path = f"/api/v1/review-cases/{review_id}/resolution"
         assert restarted.post(resolution_path, json=resolution).status_code == 401
-        directory = SqliteSupervisorDirectory(settings.database)
-        ManageSupervisors(directory).enable("reviewer", "Synthetic reviewer")
-        respx_mock.get("http://identity.test/internal/auth/validate-token/").respond(
-            204,
-            headers={
-                "X-Authenticated-User-Id": "reviewer",
-                "X-Authenticated-Token-Type": "access",
-            },
-        )
+        respx_mock.get(
+            "http://search.test/internal/auth/validate-admin-token/"
+        ).respond(204)
         assert (
             restarted.post(
                 resolution_path,
                 json=resolution,
-                headers={"Authorization": "Bearer synthetic-supervisor"},
+                headers={"X-Admin-Token": "synthetic-admin-token"},
             ).status_code
             == 201
         )
@@ -271,8 +263,8 @@ def test_configuration_rejects_non_origin_upstream(base_url):
         Settings(_env_file=None, qa_upstream_base_url=base_url)
 
 
-def test_upstream_requires_supervision_and_release_key():
-    with pytest.raises(ValidationError, match="requires supervision"):
+def test_upstream_requires_database_and_release_key():
+    with pytest.raises(ValidationError, match="requires a database"):
         Settings(_env_file=None, qa_upstream_base_url="http://search.test")
 
 

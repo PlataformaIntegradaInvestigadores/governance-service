@@ -6,15 +6,17 @@ approved institutional policy or a deployed governance route.
 ## Source and route
 
 Observed upstream: search-service, develop commit
-`055c32ab355df03f402303fcc622223818b98288`,
+`385c7fb55a085e5092b7b3f46a6d048e3e69a9fd`,
 `apps/search_engine/infrastructure/api/v1/views/llm_search_views.py`,
 `LLMSearchViewSet.generate_qa`. Its generator is `QAGenerationPipeline` in
 `apps/search_engine/application/services/qa_generator_service.py`.
 
 The current frontend calls `POST /api/search/v1/llm-search/generate-qa/` through
 the gateway. The internal upstream route is
-`POST /api-se/v1/llm-search/generate-qa/`. This increment does not intercept either
-route or send requests to it.
+`POST /api-se/v1/llm-search/generate-qa/`. The optional PEP calls that internal
+route for requests sent to `POST /api/v1/governed/qa/generate`. It forwards the
+JSON object with `query` and `documents` (or legacy `data`). Gateway and
+frontend integration remain pending.
 
 ## Response fields consumed
 
@@ -38,9 +40,26 @@ count. The expected count of three reflects the observed assistant contract;
 it is not a threshold for factual quality or fairness. Invalid, incomplete or
 duplicate-key policy documents fail before a decision is saved.
 
-All usable output is suspended for human review; errors and unusable responses
-are denied. There is no allow path. Complete source identifiers do not make an
-untrusted client-supplied context authoritative.
+The bundled policy suspends usable output for human review and denies errors
+and unusable responses. A distinct policy version can set `allow_complete`
+to `true` to allow success with the expected pair count and complete source
+identifiers. Complete identifiers do not make client-supplied context
+authoritative.
+
+## Governed HTTP responses
+
+| Operation | Status | Body |
+|---|---|---|
+| Generate, allowed | 200 | `status`, normalized `qa_pairs` and `source_docs` with article IDs |
+| Generate, suspended | 202 | `review_id` and `review_token` |
+| Poll, pending | 202 | `review_id` |
+| Poll, approved or modified | 200 | Same shape as allowed output, with authorized pairs |
+| Generate or poll, denied | 403 | `code` and `trace_id` |
+
+Poll `GET /api/v1/governed/qa/reviews/{review_id}` with the returned
+`review_token` as a Bearer credential. The token grants access to that
+review only. Rejection, expiry and invalid credentials yield 403. The PEP
+excludes raw output and sends `Cache-Control: no-store` with these responses.
 
 ## Local storage boundary
 
@@ -58,5 +77,5 @@ propagate without a successful saved result and leave no partial rows.
 
 SQLite triggers and a policy checksum are limited local safeguards. A database
 owner can rewrite the file or regenerate checksums. PostgreSQL roles, a hash
-chain and independent checkpoints, authenticated and authorized review,
-encryption at rest, reviewer decisions and expiry remain pending. This contract does not authorize live content delivery.
+chain, independent checkpoints and encryption at rest remain pending.
+Supervisor authorization and resolution follow ADR 0002 and ADR 0003.

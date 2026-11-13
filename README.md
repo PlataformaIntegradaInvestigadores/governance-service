@@ -3,9 +3,30 @@
 Service bootstrap for Component E, with offline Q&A assessment, versioned
 experimental policies, transactional local decision storage and protected review
 cases for suspended output. The API exposes
-runtime health, service metadata and OpenAPI. Interception, approved policies,
-human review, PostgreSQL forensic audit and explainability are pending;
-governance is not enabled for live traffic.
+runtime health, service metadata, OpenAPI and supervisor-only review routes.
+The optional Q&A proxy governs requests sent to its own route. Gateway and
+frontend integration, approved policies and PostgreSQL forensic audit are pending.
+
+## Governed Q&A
+
+Configure supervision, then set `GOVERNANCE_QA_UPSTREAM_BASE_URL` to the
+search-service origin and `GOVERNANCE_QA_RELEASE_KEY` to a stable random
+secret of at least 32 characters. Use the same key on every instance.
+`GOVERNANCE_QA_POLICY_PATH` defaults to the bundled review-only policy.
+`GOVERNANCE_QA_TIMEOUT_SECONDS` sets the httpx phase timeouts.
+
+Send the assistant's JSON request to `POST /api/v1/governed/qa/generate`.
+A suspension returns 202 with `review_id` and `review_token`. Poll
+`GET /api/v1/governed/qa/reviews/{review_id}` with the review token as the
+Bearer credential. Pending reviews return 202. Approval or modification
+returns 200 with the authorized pairs and source IDs. Rejection, expiry
+or invalid credentials return 403. Keep the token out of logs and URLs.
+Use TLS at the public boundary.
+
+A policy version with `allow_complete: true` can allow a complete response
+directly. Upstream failures and invalid responses return 403. See the
+[Q&A contract](docs/contracts/search-generate-qa.v1.md) and
+[ADR 0004](docs/adr/0004-governed-qa-policy-enforcement.md).
 
 ## Local Q&A assessment
 
@@ -35,7 +56,7 @@ an experimental local policy, not an approved institutional threshold.
 This function is not an HTTP gate or a persisted review. Calling it neither
 releases content nor creates an audit event. HTTP status alone must not be
 used to interpret generation success; the upstream can return errors in a 200
-body. There is no automatic allow path in this increment.
+body.
 
 ## Versioned local assessments
 
@@ -92,12 +113,72 @@ decision and policy snapshot too. A case is append-only, SQLite rejects one for
 a non-suspended decision, and a SHA-256 digest detects altered content on read
 (`ReviewCaseIntegrityError`, whose message has no content).
 
-Limits of this prototype: there is no authentication, authorization or
-encryption at rest, so any process that can open the file can read the content.
-For that reason no HTTP route exposes cases. Reviewer decisions, expiry and
-release are not implemented; a case stays pending. Decisions stored before this
-change have `review_case_id = None`. See
+Limits of this prototype: there is no encryption at rest, so any process that
+can open the file can read the content. Over HTTP, cases are reachable only
+through the supervisor-protected review routes described below. Decisions stored
+before this change have `review_case_id = None`. See
 [ADR 0001](docs/adr/0001-protected-review-cases-in-local-store.md).
+
+## Administrator authentication
+
+`GET /api/v1/supervisors/me` checks `X-Admin-Token` and returns
+`{"role": "admin"}`. Governance sends the token to
+`GET /internal/auth/validate-admin-token/` on the configured search-service
+origin for every protected request. Only 204 authorizes access.
+
+| Result | Status | `code` |
+|---|---|---|
+| Missing admin header | 401 | `AUTHENTICATION_REQUIRED` |
+| Invalid or rejected admin token | 403 | `ADMIN_TOKEN_REJECTED` |
+| Verifier unreachable, timed out or answering unexpectedly | 503 | `ADMIN_VERIFIER_UNAVAILABLE` |
+| Verifier or review database missing for the operation | 503 | `SUPERVISION_NOT_CONFIGURED` |
+
+Set `GOVERNANCE_ADMIN_VERIFIER_BASE_URL` to the internal search-service origin.
+`GOVERNANCE_ADMIN_VERIFIER_TIMEOUT_SECONDS` defaults to 3 and is capped at 30.
+Review cases also require a writable SQLite file at `GOVERNANCE_DATABASE`.
+See [ADR 0005](docs/adr/0005-supervision-through-admin-token.md).
+
+## Review resolutions
+
+The administrator can view and resolve a case. Both routes validate
+`X-Admin-Token` before reading the case or recording a resolution.
+
+- `GET /api/v1/review-cases/{case_id}` returns the retained pairs, source IDs,
+  policy version, reason codes, `expires_at`, `status` (`pending`, `expired`,
+  `approve`, `modify` or `reject`) and the resolution, with
+  `Cache-Control: no-store`.
+- `POST /api/v1/review-cases/{case_id}/resolution` takes `outcome`
+  (`approve`, `modify` or `reject`), an optional `justification` (at most 2000
+  characters) and, only for `modify`, the edited `qa_pairs` (1 to 50). Edited
+  pairs keep the case's source IDs. It answers 201 for a new resolution and 200
+  when the administrator repeats the same request.
+
+Rules:
+
+- A justification is required to modify, and to approve output flagged
+  `PARTIAL_GENERATION` or `SOURCE_EVIDENCE_INCOMPLETE`: both override the
+  evaluator. Rejecting needs none.
+- A case has one final resolution. Another outcome, or another supervisor,
+  gets 409 `CASE_ALREADY_RESOLVED`.
+- A case expires `GOVERNANCE_REVIEW_WINDOW_MINUTES` after it was opened
+  (default 1440, maximum 10080). A late resolution records the expiry and gets
+  409 `CASE_EXPIRED`; expired output is denied and never released. `GET` reports
+  an overdue case as `expired` without writing. `ReviewCases.expire_overdue()`
+  records expiries for all overdue cases, for a scheduler to call.
+- Resolutions are append-only. New human decisions store the fixed `admin`
+  role in both actor fields. Historical resolutions keep their recorded ID and
+  display-name snapshot. Expiry records have no human actor. Modified content
+  carries a SHA-256 digest checked on read.
+- Errors: 404 `CASE_NOT_FOUND`, 422 `JUSTIFICATION_REQUIRED` or
+  `INVALID_REQUEST`. Bodies hold only `code` and `trace_id` and never echo input.
+
+The governed polling route delivers the authorized output to the holder of
+the review credential. Views are not audited, there is
+no case list, and no scheduler calls the expiry sweep. The window is a setting,
+not part of the versioned policy. See
+[ADR 0003](docs/adr/0003-final-review-resolutions-with-expiry.md).
+
+## Local audit limits
 
 Local triggers reject updates and deletes; a policy snapshot checksum detects
 inconsistent content when read. A database file owner can replace records or
@@ -161,12 +242,13 @@ only. No database or upstream connection is needed for this increment.
 
 ## Architecture
 
-The API retains its bootstrap behavior. Domain models and repository protocols
+The default configuration leaves governed Q&A disabled. Domain models and repository protocols
 are independent of frameworks and storage. Application use cases evaluate and
 record decisions through those protocols. Infrastructure supplies strict JSON
 policy loading, response validation and SQLite storage; `main` composes them for
 the offline workflow. The application does not import Pydantic, HTTP or SQLite.
-There is no gateway interception, review endpoint or automatic content release.
+`app.api.errors` maps domain errors to coded responses. There is no gateway
+interception or automatic content release.
 Decisions are recorded under `docs/adr/`.
 
 OpenAPI follows the existing search-bff pattern: internal /api/v1 paths are
@@ -186,8 +268,10 @@ Local policy loading and decision snapshots provide partial groundwork for
 AB#217/218/236/237 and AB#258/260. They do not complete the YAML or PostgreSQL
 tasks. Protected review cases advance AB#240/241 locally; the PostgreSQL
 repository, 202 response, request evidence and explanation remain pending.
-Next: authenticated reviewers (AB#248), reviewer decisions and expiry
-(AB#244/245), the agreed audit guarantees, then the PEP. The separate
+Administrator token verification implements AB#248 locally.
+Review resolutions and expiry advance AB#244/245 and the case view advances
+AB#242. Next: release through the PEP and the 202 response, the agreed audit
+guarantees and PostgreSQL. The separate
 rag-service /ask integration remains conditional on contract, data and scope.
 
 ## Publication
@@ -197,3 +281,7 @@ pull requests, merging and deployment require the owner's approval, because a
 merge to `develop` deploys to staging automatically. See section 9 of
 [the engineering standards](docs/engineering-standards.md). Local thesis
 documents and AGENTS.md stay outside Git.
+## Retrospective Q&A sampling
+
+An administrator can create and retrieve a reproducible sample of prepared
+Q&A deliveries. See the [v1 sample API](docs/contracts/qa-samples-v1.md).

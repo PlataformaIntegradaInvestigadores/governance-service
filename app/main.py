@@ -23,6 +23,7 @@ from app.infrastructure.qa_response import assess_qa_response, retain_qa_content
 from app.infrastructure.qa_upstream import QaUpstream
 from app.infrastructure.sqlite_assessment_repository import (
     SqliteAssessmentRepository,
+    SqliteQaDeliveryRepository,
     SqliteReviewCaseRepository,
     SqliteReviewResolutionRepository,
 )
@@ -76,6 +77,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         application.state.qa_assessor = create_qa_assessor(
             settings.qa_policy_path, settings.database
         )
+        application.state.qa_deliveries = SqliteQaDeliveryRepository(settings.database)
         application.state.qa_release_key = (
             settings.qa_release_key.get_secret_value().encode()
         )

@@ -70,6 +70,13 @@ def _audit(database):
         )
 
 
+def _deliveries(database):
+    with sqlite3.connect(database) as connection:
+        return connection.execute(
+            "SELECT assessment_id, prepared_at, response_sha256 FROM qa_deliveries"
+        ).fetchall()
+
+
 @pytest.mark.parametrize("outcome", list(ReviewOutcome))
 def test_review_is_private_and_only_authorized_resolution_releases(
     client, settings, respx_mock, outcome, monkeypatch, caplog
@@ -118,6 +125,7 @@ def test_review_is_private_and_only_authorized_resolution_releases(
             == 201
         )
 
+    assert _deliveries(settings.database) == []
     result = restarted.get(path, headers=headers)
     assert result.headers["cache-control"] == "no-store"
     assert _ANSWER not in caplog.text
@@ -127,9 +135,15 @@ def test_review_is_private_and_only_authorized_resolution_releases(
         answer = _ANSWER if outcome is ReviewOutcome.APPROVE else "Corrected answer"
         assert result.json()["qa_pairs"][0]["answer"] == answer
         assert result.json()["source_docs"] == [{"article_id": "1"}]
+        [(assessment_id, prepared_at, digest)] = _deliveries(settings.database)
+        assert assessment_id == reviews.view(review_id).record.assessment_id
+        assert digest == hashlib.sha256(result.content).hexdigest()
+        assert restarted.get(path, headers=headers).content == result.content
+        assert _deliveries(settings.database) == [(assessment_id, prepared_at, digest)]
     else:
         assert result.status_code == 403
         assert _ANSWER not in result.text
+        assert _deliveries(settings.database) == []
 
 
 def test_complete_output_is_allowed_only_by_explicit_version(
@@ -158,6 +172,58 @@ def test_complete_output_is_allowed_only_by_explicit_version(
         [("allow", '["COMPLETE_GENERATION_ALLOWED"]')],
         0,
     )
+    [(assessment_id, _, digest)] = _deliveries(settings.database)
+    assert digest == hashlib.sha256(response.content).hexdigest()
+    with sqlite3.connect(settings.database) as connection:
+        assert connection.execute(
+            "SELECT assessment_id FROM assessments"
+        ).fetchone() == (assessment_id,)
+        for statement in (
+            "UPDATE qa_deliveries SET response_sha256 = 'changed'",
+            "DELETE FROM qa_deliveries",
+        ):
+            with pytest.raises(sqlite3.IntegrityError, match="append-only"):
+                connection.execute(statement)
+
+
+@pytest.mark.parametrize("deferred", [False, True])
+def test_failed_delivery_write_denies_without_record(
+    client, settings, respx_mock, deferred
+):
+    if deferred:
+        review_id, headers = _request_review(client, respx_mock)
+        respx_mock.get(
+            "http://search.test/internal/auth/validate-admin-token/"
+        ).respond(204)
+        assert (
+            client.post(
+                f"/api/v1/review-cases/{review_id}/resolution",
+                json={"outcome": "approve"},
+                headers={"X-Admin-Token": "synthetic-admin-token"},
+            ).status_code
+            == 201
+        )
+    else:
+        settings.qa_policy_path.write_text(
+            '{"policy_id":"qa","version":"2","expected_pairs":1,"allow_complete":true}'
+        )
+        respx_mock.post(_UPSTREAM).respond(json=_QA)
+    with sqlite3.connect(settings.database) as connection:
+        connection.execute("""
+            CREATE TRIGGER fail_delivery BEFORE INSERT ON qa_deliveries
+            BEGIN SELECT RAISE(ABORT, 'synthetic failure'); END
+        """)
+
+    result = (
+        client.get(f"/api/v1/governed/qa/reviews/{review_id}", headers=headers)
+        if deferred
+        else client.post(_GENERATE, json=_REQUEST)
+    )
+
+    assert result.status_code == 403
+    assert _ANSWER not in result.text
+    assert _deliveries(settings.database) == []
+    assert len(_audit(settings.database)[0]) == 1
 
 
 @pytest.mark.parametrize(

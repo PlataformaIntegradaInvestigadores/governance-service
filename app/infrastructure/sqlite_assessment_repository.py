@@ -3,7 +3,7 @@ import json
 import sqlite3
 from contextlib import closing
 from dataclasses import asdict
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from app.domain.qa import (
@@ -60,6 +60,15 @@ CREATE TABLE IF NOT EXISTS policies (
     PRIMARY KEY (policy_id, version)
 );
 {_ASSESSMENTS}
+CREATE TABLE IF NOT EXISTS qa_deliveries (
+    assessment_id TEXT PRIMARY KEY NOT NULL REFERENCES assessments(assessment_id),
+    prepared_at TEXT NOT NULL,
+    response_sha256 TEXT NOT NULL
+);
+CREATE TRIGGER IF NOT EXISTS qa_deliveries_no_update BEFORE UPDATE ON qa_deliveries
+BEGIN SELECT RAISE(ABORT, 'Q&A deliveries are append-only'); END;
+CREATE TRIGGER IF NOT EXISTS qa_deliveries_no_delete BEFORE DELETE ON qa_deliveries
+BEGIN SELECT RAISE(ABORT, 'Q&A deliveries are append-only'); END;
 CREATE TABLE IF NOT EXISTS review_cases (
     case_id TEXT PRIMARY KEY NOT NULL,
     assessment_id TEXT NOT NULL UNIQUE REFERENCES assessments(assessment_id),
@@ -249,6 +258,28 @@ class SqliteAssessmentRepository:
             ),
             row["case_id"],
         )
+
+
+class SqliteQaDeliveryRepository:
+    def __init__(self, path: Path) -> None:
+        self._path = path
+        _initialize(path)
+
+    def record(self, assessment_id: str, response_body: bytes) -> None:
+        with closing(sqlite3.connect(self._path)) as connection, connection:
+            connection.execute("PRAGMA foreign_keys = ON")
+            connection.execute(
+                """
+                INSERT INTO qa_deliveries (assessment_id, prepared_at, response_sha256)
+                VALUES (?, ?, ?)
+                ON CONFLICT(assessment_id) DO NOTHING
+                """,
+                (
+                    assessment_id,
+                    datetime.now(UTC).isoformat(),
+                    hashlib.sha256(response_body).hexdigest(),
+                ),
+            )
 
 
 class SqliteReviewCaseRepository:

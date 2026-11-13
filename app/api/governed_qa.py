@@ -28,8 +28,10 @@ def _ticket(key: bytes, review_id: UUID) -> str:
     return hmac.digest(key, b"governed-qa-release:" + review_id.bytes, "sha256").hex()
 
 
-def _output(content: RetainedQaContent) -> JSONResponse:
-    return _response(
+def _deliver(
+    request: Request, assessment_id: str, content: RetainedQaContent
+) -> JSONResponse:
+    response = _response(
         200,
         {
             "status": "success",
@@ -42,6 +44,8 @@ def _output(content: RetainedQaContent) -> JSONResponse:
             ],
         },
     )
+    request.app.state.qa_deliveries.record(assessment_id, response.body)
+    return response
 
 
 @router.post("/generate")
@@ -55,7 +59,7 @@ def generate(
     try:
         record = state.qa_assessor.execute(upstream)
         if record.assessment.verdict is Verdict.ALLOW:
-            return _output(retain_qa_content(upstream))
+            return _deliver(request, record.assessment_id, retain_qa_content(upstream))
     except (OSError, ValueError, sqlite3.Error):
         return _denied(request)
     if record.review_case_id is None:
@@ -96,6 +100,10 @@ def review_status(
     if view.resolution.outcome not in RELEASING_OUTCOMES:
         return _denied(request)
     try:
-        return _output(view.resolution.modified_content or view.case.content)
-    except UnicodeError:
+        return _deliver(
+            request,
+            view.record.assessment_id,
+            view.resolution.modified_content or view.case.content,
+        )
+    except (OSError, ValueError, sqlite3.Error):
         return _denied(request)

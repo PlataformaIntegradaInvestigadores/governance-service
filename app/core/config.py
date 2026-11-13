@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     qa_upstream_base_url: AnyHttpUrl | None = None
     qa_timeout_seconds: float = Field(default=30.0, gt=0, le=120)
     qa_policy_path: Path = Path("policies/search-qa-review.draft-1.json")
+    qa_retain_synthetic_deliveries: bool = False
     qa_release_key: SecretStr | None = Field(default=None, min_length=32)
 
     @field_validator("qa_upstream_base_url", "admin_verifier_base_url")
@@ -51,6 +52,10 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def require_qa_settings(self) -> "Settings":
+        if self.qa_retain_synthetic_deliveries and self.environment != "local":
+            raise ValueError(
+                "Synthetic delivery retention requires the local environment"
+            )
         if self.qa_upstream_base_url is not None and (
             self.database is None or self.qa_release_key is None
         ):

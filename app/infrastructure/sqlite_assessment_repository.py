@@ -75,6 +75,23 @@ CREATE TABLE IF NOT EXISTS qa_samples (
     sample_id TEXT PRIMARY KEY NOT NULL,
     snapshot_json TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS qa_delivery_content (
+    assessment_id TEXT PRIMARY KEY NOT NULL REFERENCES qa_deliveries(assessment_id),
+    response_body BLOB NOT NULL
+);
+CREATE TABLE IF NOT EXISTS qa_sample_reviews (
+    sample_id TEXT NOT NULL REFERENCES qa_samples(sample_id),
+    assessment_id TEXT NOT NULL REFERENCES qa_delivery_content(assessment_id),
+    decision_json TEXT NOT NULL,
+    resolved_at TEXT NOT NULL,
+    PRIMARY KEY (sample_id, assessment_id)
+);
+CREATE TRIGGER IF NOT EXISTS qa_sample_reviews_no_update
+BEFORE UPDATE ON qa_sample_reviews
+BEGIN SELECT RAISE(ABORT, 'Q&A sample reviews are append-only'); END;
+CREATE TRIGGER IF NOT EXISTS qa_sample_reviews_no_delete
+BEFORE DELETE ON qa_sample_reviews
+BEGIN SELECT RAISE(ABORT, 'Q&A sample reviews are append-only'); END;
 CREATE TRIGGER IF NOT EXISTS qa_samples_no_update BEFORE UPDATE ON qa_samples
 BEGIN SELECT RAISE(ABORT, 'Q&A samples are append-only'); END;
 CREATE TRIGGER IF NOT EXISTS qa_samples_no_delete BEFORE DELETE ON qa_samples
@@ -271,14 +288,15 @@ class SqliteAssessmentRepository:
 
 
 class SqliteQaDeliveryRepository:
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, retain_content: bool = False) -> None:
         self._path = path
+        self._retain_content = retain_content
         _initialize(path)
 
     def record(self, assessment_id: str, response_body: bytes) -> None:
         with closing(sqlite3.connect(self._path)) as connection, connection:
             connection.execute("PRAGMA foreign_keys = ON")
-            connection.execute(
+            inserted = connection.execute(
                 """
                 INSERT INTO qa_deliveries (assessment_id, prepared_at, response_sha256)
                 VALUES (?, ?, ?)
@@ -290,6 +308,86 @@ class SqliteQaDeliveryRepository:
                     hashlib.sha256(response_body).hexdigest(),
                 ),
             )
+            if inserted.rowcount and self._retain_content:
+                connection.execute(
+                    "INSERT INTO qa_delivery_content VALUES (?, ?)",
+                    (assessment_id, response_body),
+                )
+
+    def review_content(self, assessment_id: str) -> dict:
+        with closing(sqlite3.connect(self._path)) as connection:
+            row = connection.execute(
+                """
+                SELECT response_body, response_sha256
+                FROM qa_delivery_content JOIN qa_deliveries USING (assessment_id)
+                WHERE assessment_id = ?
+                """,
+                (assessment_id,),
+            ).fetchone()
+        if row is None:
+            raise QaSampleNotFoundError
+        if hashlib.sha256(row[0]).hexdigest() != row[1]:
+            raise ReviewCaseIntegrityError("Delivery content integrity check failed")
+        return json.loads(row[0])
+
+    def save_review(self, sample_id: UUID, assessment_id: str, decision: dict) -> dict:
+        document = json.dumps(decision, sort_keys=True)
+        with closing(sqlite3.connect(self._path)) as connection, connection:
+            connection.execute("PRAGMA foreign_keys = ON")
+            connection.execute(
+                """
+                INSERT INTO qa_sample_reviews VALUES (?, ?, ?, ?)
+                ON CONFLICT(sample_id, assessment_id) DO NOTHING
+                """,
+                (
+                    str(sample_id),
+                    assessment_id,
+                    document,
+                    datetime.now(UTC).isoformat(),
+                ),
+            )
+            saved, resolved_at = connection.execute(
+                """
+                SELECT decision_json, resolved_at FROM qa_sample_reviews
+                WHERE sample_id = ? AND assessment_id = ?
+                """,
+                (str(sample_id), assessment_id),
+            ).fetchone()
+            if saved != document:
+                raise ReviewCaseAlreadyResolvedError
+        return {**decision, "resolved_at": resolved_at}
+
+    def intervention_counts(self, sample: QaSample) -> dict[str, int]:
+        population = json.dumps(sample.population)
+        with closing(sqlite3.connect(self._path)) as connection:
+            prior, later, combined = connection.execute(
+                """
+                WITH eligible AS (SELECT value AS assessment_id FROM json_each(?)),
+                prior AS (
+                    SELECT assessment_id FROM eligible
+                    JOIN review_cases USING (assessment_id)
+                    JOIN review_resolutions USING (case_id)
+                    WHERE supervisor_identity_id IS NOT NULL
+                ),
+                later AS (
+                    SELECT assessment_id FROM eligible
+                    JOIN qa_sample_reviews USING (assessment_id)
+                    WHERE sample_id = ?
+                )
+                SELECT (SELECT count(*) FROM prior), (SELECT count(*) FROM later),
+                       (SELECT count(*) FROM (
+                           SELECT assessment_id FROM prior
+                           UNION SELECT assessment_id FROM later
+                       ))
+                """,
+                (population, str(sample.sample_id)),
+            ).fetchone()
+        return {
+            "eligible": len(sample.population),
+            "prior": prior,
+            "retrospective": later,
+            "combined": combined,
+        }
 
     def eligible_ids(self, start: datetime, end: datetime) -> tuple[str, ...]:
         with closing(sqlite3.connect(self._path)) as connection:
@@ -303,11 +401,15 @@ class SqliteQaDeliveryRepository:
                     FROM qa_deliveries
                 )
                 WHERE timestamp >= ? AND timestamp < ?
+                  AND (? = 0 OR assessment_id IN (
+                      SELECT assessment_id FROM qa_delivery_content
+                  ))
                 ORDER BY assessment_id
                 """,
                 (
                     start.astimezone(UTC).isoformat(timespec="microseconds"),
                     end.astimezone(UTC).isoformat(timespec="microseconds"),
+                    self._retain_content,
                 ),
             )
             return tuple(row[0] for row in rows)

@@ -167,6 +167,106 @@ def test_sample_storage_failure_leaves_no_snapshot(client, settings, respx_mock)
         assert connection.execute("SELECT COUNT(*) FROM qa_samples").fetchone() == (0,)
 
 
+def test_retrospective_review_preserves_delivered_content(settings, respx_mock):
+    settings.qa_retain_synthetic_deliveries = True
+    client = TestClient(create_app(settings))
+    review_id, ticket = _request_review(client, respx_mock)
+    admin = {"X-Admin-Token": "synthetic-admin-token"}
+    respx_mock.get("http://search.test/internal/auth/validate-admin-token/").respond(
+        204
+    )
+    assert (
+        client.post(
+            f"/api/v1/review-cases/{review_id}/resolution",
+            json={"outcome": "approve"},
+            headers=admin,
+        ).status_code
+        == 201
+    )
+    path = f"/api/v1/governed/qa/reviews/{review_id}"
+    original = client.get(path, headers=ticket)
+    settings.qa_policy_path.write_text(
+        '{"policy_id":"qa","version":"2","expected_pairs":1,"allow_complete":true}'
+    )
+    for _ in range(9):
+        assert client.post(_GENERATE, json=_REQUEST).status_code == 200
+    sample = client.post(
+        "/api/v1/qa-samples/",
+        json={
+            "start": "2000-01-01T00:00:00Z",
+            "end": "2100-01-01T00:00:00Z",
+            "seed": 42,
+        },
+        headers=admin,
+    ).json()
+    root = f"/api/v1/qa-samples/{sample['sample_id']}"
+    prior = client.app.state.review_cases.view(review_id).record.assessment_id
+    other, third, *_ = [item for item in sample["selected"] if item != prior]
+    target = f"{root}/deliveries/{prior}"
+    assert client.get(target).status_code == 401
+    assert client.get(target, headers=admin).json() == original.json()
+    resolution = f"{target}/resolution"
+    assert client.put(resolution, json={"outcome": "confirm"}).status_code == 401
+    with sqlite3.connect(settings.database) as connection:
+        connection.execute("""
+            CREATE TRIGGER fail_review BEFORE INSERT ON qa_sample_reviews
+            BEGIN SELECT RAISE(ABORT, 'synthetic failure'); END
+        """)
+    assert (
+        client.put(resolution, json={"outcome": "confirm"}, headers=admin).status_code
+        == 503
+    )
+    with sqlite3.connect(settings.database) as connection:
+        assert connection.execute(
+            "SELECT count(*) FROM qa_sample_reviews"
+        ).fetchone() == (0,)
+        connection.execute("DROP TRIGGER fail_review")
+    assert (
+        client.put(resolution, json={"outcome": "flag"}, headers=admin).status_code
+        == 422
+    )
+    correction = {
+        "outcome": "correct",
+        "justification": "Synthetic reason",
+        "qa_pairs": [{"question": "Question", "answer": "Revision"}],
+    }
+    result = client.put(resolution, json=correction, headers=admin)
+    assert result.status_code == 200
+    assert result.json()["supervisor_identity_id"] == "admin"
+    assert (
+        client.put(resolution, json=correction, headers=admin).json() == result.json()
+    )
+    assert (
+        client.put(resolution, json={"outcome": "confirm"}, headers=admin).status_code
+        == 409
+    )
+    for identifier, decision in (
+        (other, {"outcome": "confirm"}),
+        (third, {"outcome": "flag", "justification": "Synthetic reason"}),
+    ):
+        assert (
+            client.put(
+                f"{root}/deliveries/{identifier}/resolution",
+                json=decision,
+                headers=admin,
+            ).status_code
+            == 200
+        )
+    assert client.get(path, headers=ticket).content == original.content
+    restarted = TestClient(create_app(settings))
+    assert restarted.get(f"{root}/interventions", headers=admin).json() == {
+        "counts": {"eligible": 10, "prior": 1, "retrospective": 3, "combined": 3},
+        "rates": {"prior": 0.1, "retrospective": 0.3, "combined": 0.3},
+    }
+
+
+def test_synthetic_retention_is_unavailable_in_staging():
+    with pytest.raises(ValidationError, match="requires the local environment"):
+        Settings(
+            _env_file=None, environment="staging", qa_retain_synthetic_deliveries=True
+        )
+
+
 @pytest.mark.parametrize(
     "values",
     [("", 10, 10), ("1", True, 10), ("1", 101, 10), ("1", 10, True), ("1", 10, 0)],

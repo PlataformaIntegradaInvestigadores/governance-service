@@ -78,7 +78,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         application.state.qa_assessor = create_qa_assessor(
             settings.qa_policy_path, settings.database
         )
-        application.state.qa_deliveries = SqliteQaDeliveryRepository(settings.database)
+        application.state.qa_deliveries = SqliteQaDeliveryRepository(
+            settings.database, settings.qa_retain_synthetic_deliveries
+        )
         application.state.qa_release_key = (
             settings.qa_release_key.get_secret_value().encode()
         )

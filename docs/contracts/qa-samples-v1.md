@@ -19,6 +19,22 @@ then by ID to break ties. Identical inputs produce identical selections.
 A new POST creates a new execution. GET retrieves a previous execution even
 after the population grows.
 
-The snapshot contains identifiers and sampling metadata. The current API
-provides sample selection only. Content retrieval and retrospective
-resolutions are pending.
+The snapshot contains identifiers and sampling metadata. Local synthetic runs
+can enable `GOVERNANCE_QA_RETAIN_SYNTHETIC_DELIVERIES=true` before generating
+deliveries. These runs sample only deliveries with a retained body. The flag
+defaults to false and is unavailable in staging and production. Existing
+delivery marks without retained bodies cannot be reviewed retrospectively.
+
+- `GET /api/v1/qa-samples/{sample_id}/deliveries/{assessment_id}` returns the
+  original body after verifying its digest.
+- `PUT /api/v1/qa-samples/{sample_id}/deliveries/{assessment_id}/resolution`
+  records `confirm`, `flag` or `correct` as the `outcome`. Flag and correct
+  require `justification`. Correct also requires replacement `qa_pairs`.
+  Identical retries return the saved decision. A different decision conflicts.
+  A correction is an audit record and does not change or notify the recipient.
+- `GET /api/v1/qa-samples/{sample_id}/interventions` reports prior,
+  retrospective and combined counts and rates over the frozen delivery
+  population. Combined uses the union of assessment IDs.
+
+Content and decisions require the administrator token. The local SQLite
+content store is unencrypted and intended only for synthetic inputs.

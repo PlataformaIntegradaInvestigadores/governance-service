@@ -7,7 +7,7 @@ from fastapi import FastAPI, Request, Response
 from fastapi.openapi.utils import get_openapi
 
 from app import __version__
-from app.api import governed_qa, review_cases, supervisors
+from app.api import governed_qa, qa_samples, review_cases, supervisors
 from app.api.errors import register_error_handlers
 from app.api.routes import health_router, router
 from app.application.record_qa_assessment import RecordQaAssessment
@@ -70,6 +70,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.review_cases = create_review_cases(settings)
     application.state.qa_upstream = None
     application.state.qa_release_key = None
+    application.state.qa_deliveries = None
     if settings.qa_upstream_base_url is not None:
         application.state.qa_upstream = QaUpstream(
             str(settings.qa_upstream_base_url), settings.qa_timeout_seconds
@@ -86,6 +87,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(supervisors.router, prefix="/api/v1")
     application.include_router(review_cases.router, prefix="/api/v1")
     application.include_router(governed_qa.router, prefix="/api/v1")
+    application.include_router(qa_samples.router, prefix="/api/v1")
     register_error_handlers(application)
 
     @application.middleware("http")

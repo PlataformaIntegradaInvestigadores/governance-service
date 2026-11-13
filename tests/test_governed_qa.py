@@ -77,6 +77,107 @@ def _deliveries(database):
         ).fetchall()
 
 
+@pytest.mark.parametrize("count", [9, 10, 101])
+def test_sample_is_protected_reproducible_and_persisted(
+    client, settings, respx_mock, count
+):
+    path = "/api/v1/qa-samples/"
+    body = {
+        "start": "2026-11-13T00:00:00Z",
+        "end": "2026-11-14T00:00:00Z",
+        "seed": 42,
+    }
+    headers = {"X-Admin-Token": "synthetic-admin-token"}
+    assert client.post(path, json=body).status_code == 401
+    verifier = respx_mock.get("http://search.test/internal/auth/validate-admin-token/")
+    verifier.respond(403)
+    assert client.post(path, json=body, headers=headers).status_code == 403
+    verifier.respond(503)
+    assert client.post(path, json=body, headers=headers).status_code == 503
+    verifier.respond(204)
+    assert (
+        client.post(
+            path, json={**body, "end": body["start"]}, headers=headers
+        ).status_code
+        == 422
+    )
+    with sqlite3.connect(settings.database) as connection:
+        connection.executemany(
+            "INSERT INTO qa_deliveries VALUES (?, ?, 'synthetic')",
+            [
+                (f"id-{index:03}", "2026-11-13T00:00:00+00:00")
+                for index in reversed(range(count))
+            ]
+            + [("excluded", "2026-11-14T00:00:00+00:00")],
+        )
+    result = client.post(path, json=body, headers=headers)
+    if count < 10:
+        assert result.status_code == 409
+        assert result.json()["code"] == "INSUFFICIENT_QA_DELIVERIES"
+        with sqlite3.connect(settings.database) as connection:
+            assert connection.execute("SELECT COUNT(*) FROM qa_samples").fetchone() == (
+                0,
+            )
+        return
+    assert result.status_code == 201
+    assert result.headers["cache-control"] == "no-store"
+    sample = result.json()
+    assert sample["population"] == [f"id-{index:03}" for index in range(count)]
+    assert len(set(sample["selected"])) == (10 if count == 10 else 11)
+    assert set(sample["selected"]) <= set(sample["population"])
+    assert (
+        client.post(path, json=body, headers=headers).json()["selected"]
+        == sample["selected"]
+    )
+    restarted = TestClient(create_app(settings))
+    assert restarted.get(path + sample["sample_id"]).status_code == 401
+    assert restarted.get(path + sample["sample_id"], headers=headers).json() == sample
+    assert (
+        restarted.get(
+            path + "00000000-0000-0000-0000-000000000000", headers=headers
+        ).status_code
+        == 404
+    )
+
+
+def test_sample_storage_failure_leaves_no_snapshot(client, settings, respx_mock):
+    respx_mock.get("http://search.test/internal/auth/validate-admin-token/").respond(
+        204
+    )
+    with sqlite3.connect(settings.database) as connection:
+        connection.executemany(
+            "INSERT INTO qa_deliveries VALUES (?, ?, 'synthetic')",
+            [(f"id-{index}", "2026-11-13T01:00:00+00:00") for index in range(10)],
+        )
+        connection.execute("""
+            CREATE TRIGGER fail_sample BEFORE INSERT ON qa_samples
+            BEGIN SELECT RAISE(ABORT, 'synthetic failure'); END
+        """)
+    result = client.post(
+        "/api/v1/qa-samples/",
+        json={
+            "start": "2026-11-13T00:00:00Z",
+            "end": "2026-11-14T00:00:00Z",
+            "seed": 42,
+        },
+        headers={"X-Admin-Token": "synthetic-admin-token"},
+    )
+    assert result.status_code == 503
+    with sqlite3.connect(settings.database) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM qa_samples").fetchone() == (0,)
+
+
+@pytest.mark.parametrize(
+    "values",
+    [("", 10, 10), ("1", True, 10), ("1", 101, 10), ("1", 10, True), ("1", 10, 0)],
+)
+def test_sampling_policy_rejects_invalid_values(values):
+    from app.domain.qa_sampling import QaSamplingPolicy
+
+    with pytest.raises(ValueError, match="Invalid sampling policy"):
+        QaSamplingPolicy(*values)
+
+
 @pytest.mark.parametrize("outcome", list(ReviewOutcome))
 def test_review_is_private_and_only_authorized_resolution_releases(
     client, settings, respx_mock, outcome, monkeypatch, caplog

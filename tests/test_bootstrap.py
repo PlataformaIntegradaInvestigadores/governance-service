@@ -47,6 +47,8 @@ def test_openapi_is_cached_and_excludes_health():
         "/review-cases/{case_id}/resolution",
         "/governed/qa/generate",
         "/governed/qa/reviews/{review_id}",
+        "/qa-samples/",
+        "/qa-samples/{sample_id}",
     }
     assert client.app.openapi() is client.app.openapi()
     assert "/api/v1/status" not in schema["paths"]

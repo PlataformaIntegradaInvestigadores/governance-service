@@ -2,12 +2,18 @@ from datetime import datetime
 from typing import Protocol
 
 from app.domain.qa import QaPolicy, RecordedAssessment
+from app.domain.qa_sampling import QaSample
 from app.domain.resolution import ReviewResolution
 from app.domain.review import ReviewCase
 
 
 class PolicyRepository(Protocol):
     def load(self) -> QaPolicy: ...
+
+
+class QaSampleRepository(Protocol):
+    def eligible_ids(self, start: datetime, end: datetime) -> tuple[str, ...]: ...
+    def save(self, sample: QaSample) -> None: ...
 
 
 class AssessmentRepository(Protocol):

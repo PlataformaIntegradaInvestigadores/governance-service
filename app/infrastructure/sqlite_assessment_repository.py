@@ -5,6 +5,7 @@ from contextlib import closing
 from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
+from uuid import UUID
 
 from app.domain.qa import (
     Assessment,
@@ -13,6 +14,7 @@ from app.domain.qa import (
     RecordedAssessment,
     Verdict,
 )
+from app.domain.qa_sampling import QaSample, QaSampleNotFoundError, QaSamplingPolicy
 from app.domain.resolution import (
     ReviewCaseAlreadyResolvedError,
     ReviewOutcome,
@@ -69,6 +71,14 @@ CREATE TRIGGER IF NOT EXISTS qa_deliveries_no_update BEFORE UPDATE ON qa_deliver
 BEGIN SELECT RAISE(ABORT, 'Q&A deliveries are append-only'); END;
 CREATE TRIGGER IF NOT EXISTS qa_deliveries_no_delete BEFORE DELETE ON qa_deliveries
 BEGIN SELECT RAISE(ABORT, 'Q&A deliveries are append-only'); END;
+CREATE TABLE IF NOT EXISTS qa_samples (
+    sample_id TEXT PRIMARY KEY NOT NULL,
+    snapshot_json TEXT NOT NULL
+);
+CREATE TRIGGER IF NOT EXISTS qa_samples_no_update BEFORE UPDATE ON qa_samples
+BEGIN SELECT RAISE(ABORT, 'Q&A samples are append-only'); END;
+CREATE TRIGGER IF NOT EXISTS qa_samples_no_delete BEFORE DELETE ON qa_samples
+BEGIN SELECT RAISE(ABORT, 'Q&A samples are append-only'); END;
 CREATE TABLE IF NOT EXISTS review_cases (
     case_id TEXT PRIMARY KEY NOT NULL,
     assessment_id TEXT NOT NULL UNIQUE REFERENCES assessments(assessment_id),
@@ -280,6 +290,58 @@ class SqliteQaDeliveryRepository:
                     hashlib.sha256(response_body).hexdigest(),
                 ),
             )
+
+    def eligible_ids(self, start: datetime, end: datetime) -> tuple[str, ...]:
+        with closing(sqlite3.connect(self._path)) as connection:
+            rows = connection.execute(
+                """
+                SELECT assessment_id FROM (
+                    SELECT assessment_id,
+                           CASE WHEN length(prepared_at) = 25
+                                THEN replace(prepared_at, '+00:00', '.000000+00:00')
+                                ELSE prepared_at END AS timestamp
+                    FROM qa_deliveries
+                )
+                WHERE timestamp >= ? AND timestamp < ?
+                ORDER BY assessment_id
+                """,
+                (
+                    start.astimezone(UTC).isoformat(timespec="microseconds"),
+                    end.astimezone(UTC).isoformat(timespec="microseconds"),
+                ),
+            )
+            return tuple(row[0] for row in rows)
+
+    def save(self, sample: QaSample) -> None:
+        document = asdict(sample)
+        document["sample_id"] = str(sample.sample_id)
+        document["start"] = sample.start.isoformat()
+        document["end"] = sample.end.isoformat()
+        with closing(sqlite3.connect(self._path)) as connection, connection:
+            connection.execute(
+                "INSERT INTO qa_samples VALUES (?, ?)",
+                (str(sample.sample_id), json.dumps(document)),
+            )
+
+    def get(self, sample_id: UUID) -> QaSample:
+        with closing(sqlite3.connect(self._path)) as connection:
+            row = connection.execute(
+                "SELECT snapshot_json FROM qa_samples WHERE sample_id = ?",
+                (str(sample_id),),
+            ).fetchone()
+        if row is None:
+            raise QaSampleNotFoundError
+        document = json.loads(row[0])
+        return QaSample(
+            sample_id,
+            datetime.fromisoformat(document["start"]),
+            datetime.fromisoformat(document["end"]),
+            document["seed"],
+            QaSamplingPolicy(**document["policy"]),
+            document["algorithm"],
+            tuple(document["population"]),
+            tuple(document["selected"]),
+        )
 
 
 class SqliteReviewCaseRepository:

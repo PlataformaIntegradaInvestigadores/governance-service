@@ -281,3 +281,7 @@ pull requests, merging and deployment require the owner's approval, because a
 merge to `develop` deploys to staging automatically. See section 9 of
 [the engineering standards](docs/engineering-standards.md). Local thesis
 documents and AGENTS.md stay outside Git.
+## Retrospective Q&A sampling
+
+An administrator can create and retrieve a reproducible sample of prepared
+Q&A deliveries. See the [v1 sample API](docs/contracts/qa-samples-v1.md).

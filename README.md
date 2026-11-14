@@ -1,220 +1,240 @@
-# Centinela Governance Service
+# Centinela — governance-service
 
-Service bootstrap for Component E, with offline Q&A assessment, versioned
-experimental policies, transactional local decision storage and protected review
-cases for suspended output. The API exposes
-runtime health, service metadata, OpenAPI and supervisor-only review routes.
-The optional Q&A proxy governs requests sent to its own route. Gateway and
-frontend integration, approved policies and PostgreSQL forensic audit are pending.
+Servicio FastAPI del Componente E de Centinela: gobernanza de la salida generada
+por otros servicios. Evalúa cada respuesta contra una política versionada,
+registra la decisión y, si la política lo pide, retiene la respuesta para que un
+administrador la revise antes de entregarla.
 
-## Governed Q&A
+Este README es para quien desarrolla o integra el servicio. Explica qué hace,
+cómo ejecutarlo y dónde está el detalle. Los contratos HTTP y las decisiones de
+arquitectura están en inglés, en [`docs/contracts/`](docs/contracts/) y
+[`docs/adr/`](docs/adr/).
 
-Configure supervision, then set `GOVERNANCE_QA_UPSTREAM_BASE_URL` to the
-search-service origin and `GOVERNANCE_QA_RELEASE_KEY` to a stable random
-secret of at least 32 characters. Use the same key on every instance.
-`GOVERNANCE_QA_POLICY_PATH` defaults to the bundled review-only policy.
-`GOVERNANCE_QA_TIMEOUT_SECONDS` sets the httpx phase timeouts.
+## Estado
 
-Send the assistant's JSON request to `POST /api/v1/governed/qa/generate`.
-A suspension returns 202 with `review_id` and `review_token`. Poll
-`GET /api/v1/governed/qa/reviews/{review_id}` with the review token as the
-Bearer credential. Pending reviews return 202. Approval or modification
-returns 200 with the authorized pairs and source IDs. Rejection, expiry
-or invalid credentials return 403. Keep the token out of logs and URLs.
-Use TLS at the public boundary.
+El servicio es un prototipo local. Funciona hoy:
 
-A policy version with `allow_complete: true` can allow a complete response
-directly. Upstream failures and invalid responses return 403. See the
-[Q&A contract](docs/contracts/search-generate-qa.v1.md) and
-[ADR 0004](docs/adr/0004-governed-qa-policy-enforcement.md).
+- Q&A gobernada: proxy de `search-service/generate-qa` con evaluación,
+  retención y entrega diferida.
+- Recomendaciones gobernadas: proxy de `ethical-recommender-service` que
+  evalúa la configuración de equidad aplicada.
+- Casos de revisión protegidos, con resolución final y vencimiento.
+- Autenticación de administradores mediante `X-Admin-Token`.
+- Muestreo retrospectivo reproducible de entregas de Q&A.
 
-## Local Q&A assessment
+Pendiente: integración con gateway y frontend, políticas institucionales
+aprobadas, almacén de políticas YAML y auditoría forense en PostgreSQL. Las
+políticas incluidas (`policies/*.json`) son borradores experimentales, no
+umbrales institucionales.
 
-`app.infrastructure.qa_response.assess_qa_response` validates a supplied
-`search-service/generate-qa` response, then calls the application policy
-evaluator. The domain contains immutable observations, policy identity and
-decisions, without HTTP, persistence or framework dependencies.
+## Inicio rápido
 
-```python
-from app.domain.qa import QaPolicy
-from app.infrastructure.qa_response import assess_qa_response
+Requisito: Python 3.11, el objetivo de despliegue y de CI. Las versiones
+resueltas están fijadas en `constraints.txt`.
 
-policy = QaPolicy("search-qa-review", "draft-1", expected_pairs=3)
-result = assess_qa_response({"status": "error", "qa_pairs": []}, policy)
-assert result.verdict == "deny"
-assert result.reason_codes == ("UPSTREAM_GENERATION_FAILED",)
-```
+1. Crea el entorno e instala las dependencias:
 
-Malformed bodies, generation errors and unusable pair counts are denied.
-Nonempty responses within the expected count are suspended for human review,
-with additional reasons for partial generation or incomplete source identifiers.
-Every assessment identifies its policy and version and excludes response text.
-Complete output is also suspended: source identifiers do not verify the actual
-context, factual correctness or claim-to-source support. The example policy is
-an experimental local policy, not an approved institutional threshold.
+   ```powershell
+   py -3.11 -m venv .venv
+   .\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+   ```
 
-This function is not an HTTP gate or a persisted review. Calling it neither
-releases content nor creates an audit event. HTTP status alone must not be
-used to interpret generation success; the upstream can return errors in a 200
-body.
+2. Copia `.env.example` a `.env`. La configuración por defecto no necesita
+   base de datos ni servicios externos.
+3. Inicia la API:
 
-## Versioned local assessments
+   ```powershell
+   .\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8005
+   ```
 
-The composition root also exposes an offline workflow that loads a strict JSON
-policy, evaluates a supplied response and saves a decision before returning it:
+4. Confirma que responde en `GET /health`, `GET /api/v1/status` y `/docs`.
+
+`/health` describe solo el proceso de la API: un servicio sano no implica que
+los controles de gobernanza estén configurados. El puerto 8005 es provisional
+hasta acordarlo con el mantenedor.
+
+## Configuración
+
+Las variables usan el prefijo `GOVERNANCE_` y se leen también de `.env`. Una
+configuración inválida falla al crear la aplicación. Los archivos de ejemplo no
+contienen credenciales.
+
+| Variable | Uso | Valor por defecto |
+|---|---|---|
+| `ENVIRONMENT` | `local`, `staging` o `production` | `local` |
+| `PUBLIC_BASE_PATH` | Servidor declarado en OpenAPI | `/api/v1` |
+| `PORT` | Puerto en Compose y contenedor (Uvicorn directo usa `--port`) | `8005` |
+| `DATABASE` | Archivo SQLite escribible; requerido por revisión, Q&A y recomendaciones | sin valor |
+| `ADMIN_VERIFIER_BASE_URL` | Origen interno de `search-service` que valida tokens | sin valor |
+| `ADMIN_VERIFIER_TIMEOUT_SECONDS` | Tiempo máximo de validación (máx. 30) | `3` |
+| `REVIEW_WINDOW_MINUTES` | Plazo para resolver un caso (máx. 10080) | `1440` |
+| `QA_UPSTREAM_BASE_URL` | Origen de `search-service`; activa la Q&A gobernada | sin valor |
+| `QA_RELEASE_KEY` | Secreto aleatorio estable, ≥ 32 caracteres, igual en todas las instancias | sin valor |
+| `QA_POLICY_PATH` | Política de Q&A | `policies/search-qa-review.draft-1.json` |
+| `QA_TIMEOUT_SECONDS` | Tiempos de fase de httpx (máx. 120) | `30` |
+| `QA_RETAIN_SYNTHETIC_DELIVERIES` | Solo local: conserva cuerpos sintéticos para el muestreo | `false` |
+| `RECOMMENDER_UPSTREAM_BASE_URL` | Origen de `ethical-recommender-service` | sin valor |
+| `RECOMMENDER_HMAC_KEY` | Clave HMAC externa, ≥ 32 caracteres | sin valor |
+| `RECOMMENDER_POLICY_PATH` | Política de equidad | `policies/recommender-fairness.draft-1.json` |
+| `RECOMMENDER_TIMEOUT_SECONDS` | Tiempo máximo hacia el recomendador (máx. 120) | `30` |
+
+Guarda las bases locales en el directorio ignorado `local/` y usa solo datos
+sintéticos.
+
+## API
+
+Todas las rutas cuelgan de `/api/v1`. Las de administrador exigen la cabecera
+`X-Admin-Token`.
+
+| Método y ruta | Quién | Propósito |
+|---|---|---|
+| `POST /governed/qa/generate` | Solicitante | Generar Q&A gobernada |
+| `GET /governed/qa/reviews/{review_id}` | Solicitante (token de revisión) | Consultar una Q&A retenida |
+| `POST /governed/recommender/recommend` | Solicitante | Obtener recomendaciones gobernadas |
+| `GET /governed/recommender/reviews/{review_id}` | Solicitante (token de revisión) | Consultar una recomendación retenida |
+| `GET /supervisors/me` | Administrador | Comprobar el token (`{"role": "admin"}`) |
+| `GET /review-cases/{case_id}` | Administrador | Ver un caso retenido |
+| `POST /review-cases/{case_id}/resolution` | Administrador | Aprobar, modificar o rechazar un caso |
+| `POST /qa-samples/` | Administrador | Crear una muestra retrospectiva |
+| `GET /qa-samples/{sample_id}` | Administrador | Leer una muestra |
+| `GET /qa-samples/{sample_id}/deliveries/{assessment_id}` | Administrador | Leer una entrega muestreada |
+| `PUT /qa-samples/{sample_id}/deliveries/{assessment_id}/resolution` | Administrador | Confirmar, marcar o corregir una entrega |
+| `GET /qa-samples/{sample_id}/interventions` | Administrador | Tasas de intervención |
+| `GET /status` | Cualquiera | Metadatos del servicio |
+
+Los contratos completos:
+
+- [Q&A gobernada](docs/contracts/search-generate-qa.v1.md)
+- [Recomendaciones gobernadas](docs/contracts/ethical-recommender-recommend.v1.md)
+- [Muestreo retrospectivo](docs/contracts/qa-samples-v1.md)
+
+## Flujo de gobernanza
+
+1. El solicitante llama a una ruta gobernada. El servicio reenvía la petición
+   al servicio de origen.
+2. El evaluador aplica la política versionada: Q&A devuelve `allow`, `suspend`
+   o `deny`; recomendaciones, `permit`, `retain` o `deny`.
+3. La decisión, la instantánea de la política y, si hay retención, el caso de
+   revisión se guardan en una sola transacción.
+4. Según el veredicto:
+   - Permitido: 200 con la respuesta.
+   - Retenido: 202 con `review_id` y `review_token`.
+   - Denegado, o fallo del origen, de la política o del almacenamiento: 403.
+5. El solicitante consulta la revisión con el token como credencial Bearer:
+   202 mientras está pendiente, 200 tras aprobar o modificar, 403 si se
+   rechaza, vence o la credencial no es válida.
+
+El servicio falla de forma cerrada: ante cualquier error deniega o retiene,
+nunca libera. No interpretes el éxito por el código HTTP del origen:
+`search-service` puede devolver errores dentro de un 200.
+
+Mantén el token de revisión fuera de logs y URL, y usa TLS en el borde público.
+
+### Q&A
+
+La política borrador retiene toda respuesta no vacía dentro del número esperado
+de pares, incluso la completa: los identificadores de fuente no verifican el
+contexto real ni el respaldo de cada afirmación. Deniega cuerpos malformados,
+errores de generación y conteos inutilizables. Una versión de política con
+`allow_complete: true` permite entregar directamente la respuesta completa.
+Detalle en [ADR 0004](docs/adr/0004-governed-qa-policy-enforcement.md).
+
+### Recomendaciones
+
+El servicio evalúa los parámetros de `rerank` realmente aplicados, no los
+pedidos. La política borrador retiene las respuestas que desactivan la
+equidad. Las respuestas protegidas omiten nombres y los autores se
+seudonimizan con HMAC. Detalle en
+[ADR 0006](docs/adr/0006-governed-recommendations.md).
+
+## Revisión por administradores
+
+Cada petición protegida envía el token a
+`GET /internal/auth/validate-admin-token/` en `search-service`. Solo un 204
+autoriza. Ver [ADR 0005](docs/adr/0005-supervision-through-admin-token.md).
+
+| Situación | Estado | `code` |
+|---|---|---|
+| Falta la cabecera | 401 | `AUTHENTICATION_REQUIRED` |
+| Token inválido o rechazado | 403 | `ADMIN_TOKEN_REJECTED` |
+| Verificador inaccesible, lento o con respuesta inesperada | 503 | `ADMIN_VERIFIER_UNAVAILABLE` |
+| Falta el verificador o la base de datos | 503 | `SUPERVISION_NOT_CONFIGURED` |
+
+Reglas de resolución (`approve`, `modify` o `reject`):
+
+- Modificar exige justificación (máx. 2000 caracteres). Aprobar también la
+  exige si la salida tiene `PARTIAL_GENERATION` o `SOURCE_EVIDENCE_INCOMPLETE`.
+- Un caso tiene una sola resolución final. Otro resultado u otro supervisor
+  recibe 409 `CASE_ALREADY_RESOLVED`.
+- El caso vence tras `REVIEW_WINDOW_MINUTES`. Una resolución tardía registra el
+  vencimiento y recibe 409 `CASE_EXPIRED`; la salida vencida nunca se libera.
+- Otros errores: 404 `CASE_NOT_FOUND`, 422 `JUSTIFICATION_REQUIRED` o
+  `INVALID_REQUEST`. Los cuerpos de error solo traen `code` y `trace_id`.
+- Las vistas usan `Cache-Control: no-store` y la creación responde 201 (200 si
+  se repite la misma petición).
+
+Ver [ADR 0003](docs/adr/0003-final-review-resolutions-with-expiry.md).
+
+## Datos y auditoría local
+
+- El caso de revisión guarda solo pares pregunta-respuesta e identificadores de
+  fuente. Descarta la salida cruda y los demás campos del origen.
+- Las decisiones y los casos son de solo anexado. Un digest SHA-256 detecta
+  contenido alterado al leer (`ReviewCaseIntegrityError`).
+- El contenido protegido no aparece en logs, mensajes de excepción, `repr` ni
+  consultas generales. Solo `SqliteReviewCaseRepository` lo lee.
+- Una política no cambia dentro de su versión: reutilizar ID y versión con otro
+  contenido lanza `PolicyVersionConflictError`.
+
+Límites del prototipo: SQLite no cifra en reposo, y quien pueda abrir el
+archivo puede leer o reemplazar registros, o desactivar triggers y checksums.
+No es una cadena de hashes, un log anclado ni una base de producción. No se
+auditan las vistas, no hay listado de casos y ningún planificador llama a
+`ReviewCases.expire_overdue()`. Ver
+[ADR 0001](docs/adr/0001-protected-review-cases-in-local-store.md).
+
+## Uso sin HTTP
+
+El flujo también funciona como biblioteca, útil para experimentos offline:
 
 ```python
 from pathlib import Path
 
 from app.main import create_qa_assessor
-from app.infrastructure.sqlite_assessment_repository import SqliteAssessmentRepository
 
 Path("local").mkdir(exist_ok=True)
-database = Path("local/assessments.sqlite3")
 assessor = create_qa_assessor(
-    Path("policies/search-qa-review.draft-1.json"), database
+    Path("policies/search-qa-review.draft-1.json"),
+    Path("local/assessments.sqlite3"),
 )
 record = assessor.execute({"status": "error", "qa_pairs": []})
-assert SqliteAssessmentRepository(database).get(record.assessment_id) == record
+assert record.assessment.verdict == "deny"
 ```
 
-The policy file is experimental. Its contract and intended meaning are documented
-in [the Q&A contract](docs/contracts/search-generate-qa.v1.md). Missing,
-malformed, duplicate-key or invalid policies fail without a hardcoded fallback.
-Changing a policy requires a new version: reusing the same ID/version for another
-snapshot raises `PolicyVersionConflictError` without saving another decision.
+Para evaluar sin guardar, usa
+`app.infrastructure.qa_response.assess_qa_response(response, policy)`. Esa
+función no libera contenido ni crea auditoría.
 
-SQLite stores the policy snapshot and SHA-256 together with each decision's ID,
-UTC timestamp, verdict and reason codes. Policy insertion and decision insertion
-share one transaction. An insertion or commit error propagates to the caller;
-the workflow does not return a record as saved. Reopening the repository recovers
-the persisted record. Denied responses store no generated text.
+## Arquitectura
 
-## Protected review cases
+Capas con la regla de dependencia hacia adentro:
 
-A suspended assessment also opens a review case in the same transaction. The
-case keeps what a reviewer needs and nothing else: the question/answer pairs
-(surrounding whitespace removed) and the source article identifiers present in
-the response. Raw output and other upstream fields are discarded. The decision
-record carries `review_case_id`; the case carries `assessment_id`, and both are
-unique, so each case belongs to exactly one suspended decision.
+- `app/domain`: modelos inmutables y protocolos de repositorio, sin frameworks.
+- `app/application`: casos de uso; no importa Pydantic, HTTP ni SQLite.
+- `app/infrastructure`: carga estricta de políticas JSON, clientes httpx hacia
+  los orígenes y repositorios SQLite.
+- `app/api`: rutas FastAPI; `app.api.errors` traduce errores de dominio a
+  respuestas con código.
+- `app/main.py`: raíz de composición.
 
-```python
-from app.infrastructure.sqlite_assessment_repository import SqliteReviewCaseRepository
+`tests/test_architecture.py` verifica la regla de dependencia. OpenAPI declara
+como servidor `GOVERNANCE_PUBLIC_BASE_PATH`. El gateway publicaría el servicio
+en `/api/governance` y reescribiría a `/api/v1`; esa integración requiere un PR
+aparte en el gateway.
 
-case = SqliteReviewCaseRepository(database).get(record.review_case_id)
-```
+## Calidad
 
-Content is kept apart from general queries. `SqliteAssessmentRepository.get`
-returns decision metadata and the case ID only; only `SqliteReviewCaseRepository`
-reads the content. `repr` of retained content shows counts, not text, and the
-service writes no logs about it. A failed write of the case rolls back the
-decision and policy snapshot too. A case is append-only, SQLite rejects one for
-a non-suspended decision, and a SHA-256 digest detects altered content on read
-(`ReviewCaseIntegrityError`, whose message has no content).
-
-Limits of this prototype: there is no encryption at rest, so any process that
-can open the file can read the content. Over HTTP, cases are reachable only
-through the supervisor-protected review routes described below. Decisions stored
-before this change have `review_case_id = None`. See
-[ADR 0001](docs/adr/0001-protected-review-cases-in-local-store.md).
-
-## Administrator authentication
-
-`GET /api/v1/supervisors/me` checks `X-Admin-Token` and returns
-`{"role": "admin"}`. Governance sends the token to
-`GET /internal/auth/validate-admin-token/` on the configured search-service
-origin for every protected request. Only 204 authorizes access.
-
-| Result | Status | `code` |
-|---|---|---|
-| Missing admin header | 401 | `AUTHENTICATION_REQUIRED` |
-| Invalid or rejected admin token | 403 | `ADMIN_TOKEN_REJECTED` |
-| Verifier unreachable, timed out or answering unexpectedly | 503 | `ADMIN_VERIFIER_UNAVAILABLE` |
-| Verifier or review database missing for the operation | 503 | `SUPERVISION_NOT_CONFIGURED` |
-
-Set `GOVERNANCE_ADMIN_VERIFIER_BASE_URL` to the internal search-service origin.
-`GOVERNANCE_ADMIN_VERIFIER_TIMEOUT_SECONDS` defaults to 3 and is capped at 30.
-Review cases also require a writable SQLite file at `GOVERNANCE_DATABASE`.
-See [ADR 0005](docs/adr/0005-supervision-through-admin-token.md).
-
-## Review resolutions
-
-The administrator can view and resolve a case. Both routes validate
-`X-Admin-Token` before reading the case or recording a resolution.
-
-- `GET /api/v1/review-cases/{case_id}` returns the retained pairs, source IDs,
-  policy version, reason codes, `expires_at`, `status` (`pending`, `expired`,
-  `approve`, `modify` or `reject`) and the resolution, with
-  `Cache-Control: no-store`.
-- `POST /api/v1/review-cases/{case_id}/resolution` takes `outcome`
-  (`approve`, `modify` or `reject`), an optional `justification` (at most 2000
-  characters) and, only for `modify`, the edited `qa_pairs` (1 to 50). Edited
-  pairs keep the case's source IDs. It answers 201 for a new resolution and 200
-  when the administrator repeats the same request.
-
-Rules:
-
-- A justification is required to modify, and to approve output flagged
-  `PARTIAL_GENERATION` or `SOURCE_EVIDENCE_INCOMPLETE`: both override the
-  evaluator. Rejecting needs none.
-- A case has one final resolution. Another outcome, or another supervisor,
-  gets 409 `CASE_ALREADY_RESOLVED`.
-- A case expires `GOVERNANCE_REVIEW_WINDOW_MINUTES` after it was opened
-  (default 1440, maximum 10080). A late resolution records the expiry and gets
-  409 `CASE_EXPIRED`; expired output is denied and never released. `GET` reports
-  an overdue case as `expired` without writing. `ReviewCases.expire_overdue()`
-  records expiries for all overdue cases, for a scheduler to call.
-- Resolutions are append-only. New human decisions store the fixed `admin`
-  role in both actor fields. Historical resolutions keep their recorded ID and
-  display-name snapshot. Expiry records have no human actor. Modified content
-  carries a SHA-256 digest checked on read.
-- Errors: 404 `CASE_NOT_FOUND`, 422 `JUSTIFICATION_REQUIRED` or
-  `INVALID_REQUEST`. Bodies hold only `code` and `trace_id` and never echo input.
-
-The governed polling route delivers the authorized output to the holder of
-the review credential. Views are not audited, there is
-no case list, and no scheduler calls the expiry sweep. The window is a setting,
-not part of the versioned policy. See
-[ADR 0003](docs/adr/0003-final-review-resolutions-with-expiry.md).
-
-## Local audit limits
-
-Local triggers reject updates and deletes; a policy snapshot checksum detects
-inconsistent content when read. A database file owner can replace records or
-disable/recreate triggers and checksums. This is not a hash chain, independently
-anchored audit log, authorization boundary or production database. Read access
-is local to Python callers, with no HTTP query endpoint. Store local databases
-under the ignored `local/` directory and use synthetic data for demonstrations.
-
-JSON and SQLite use available dependencies and Python's standard library for
-this local increment. The planned YAML policy store and PostgreSQL audit adapter,
-roles, migrations and integrity model remain pending. No production deployment,
-automatic schema migration or approval of institutional policy is implied.
-
-## Run locally
-
-Python 3.11 is the deployment and CI target.
-Resolved dependency versions are pinned in constraints.txt from the initial
-Python 3.11 environment. CI must confirm the Linux build separately.
-
-```powershell
-py -3.11 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
-.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8005
-```
-
-Use GET /health, GET /api/v1/status and /docs.
-The health response describes the API process only. The address field is
-unknown until deployment has an agreed reporting mechanism. A healthy
-bootstrap does not indicate that governance controls are available.
-
-Settings use the GOVERNANCE_ prefix and optional .env. Example files have no
-credentials. The port is provisional pending agreement with the maintainer.
-GOVERNANCE_PORT configures Compose/container startup; direct Uvicorn startup
-uses its --port argument. Invalid settings fail during application creation.
-
-## Quality
+Ejecuta antes de cada commit:
 
 ```powershell
 .\.venv\Scripts\python.exe -m ruff check .
@@ -222,73 +242,38 @@ uses its --port argument. Invalid settings fail during application creation.
 .\.venv\Scripts\python.exe -m pytest --cov=app --cov-report=term-missing --cov-report=xml --junitxml=report.xml
 ```
 
-Coverage includes branches and must reach 90%. Coding, testing, security and
-review rules are in [the engineering standards](docs/engineering-standards.md);
-Ruff and `tests/test_architecture.py` enforce part of them. The CI workflow targets
-Python 3.11, validates Compose and builds the Docker image. It does not deploy.
-Organization deployment workflows require agreed server paths, runners and
-permissions before configuration.
+La cobertura de ramas debe ser ≥ 90 %. Las reglas de código, pruebas,
+seguridad y revisión están en los
+[estándares de ingeniería](docs/engineering-standards.md). La CI usa
+Python 3.11, valida Compose y construye la imagen Docker; no despliega.
 
-## Container
+## Contenedor
+
+Crea la red externa si no existe y levanta el servicio:
 
 ```powershell
 docker network create centinela-net
 docker compose up -d --build
 ```
 
-Create the external network only if it is absent. Compose binds to loopback,
-uses a non-root runtime, drops capabilities and makes the filesystem read
-only. No database or upstream connection is needed for this increment.
+Compose publica solo en loopback, ejecuta como usuario no root, elimina
+capacidades y monta el sistema de archivos en solo lectura.
 
-## Architecture
+## Trazabilidad
 
-The default configuration leaves governed Q&A disabled. Domain models and repository protocols
-are independent of frameworks and storage. Application use cases evaluate and
-record decisions through those protocols. Infrastructure supplies strict JSON
-policy loading, response validation and SQLite storage; `main` composes them for
-the offline workflow. The application does not import Pydantic, HTTP or SQLite.
-`app.api.errors` maps domain errors to coded responses. There is no gateway
-interception or automatic content release.
-Decisions are recorded under `docs/adr/`.
+Work items de Azure Boards:
 
-OpenAPI follows the existing search-bff pattern: internal /api/v1 paths are
-rendered relative to a configured server. Local server: /api/v1; planned
-gateway server: /api/governance, with the gateway rewriting to /api/v1.
-The latter is a proposed integration and requires a separate gateway PR.
-See [FastAPI metadata](https://fastapi.tiangolo.com/tutorial/metadata/) and
-[proxy documentation](https://fastapi.tiangolo.com/advanced/behind-a-proxy/).
+- AB#221–224: PBI, arranque, workflows y contenedor.
+- AB#230/231: evaluación de políticas y pruebas.
+- AB#240/241: casos de revisión protegidos (local).
+- AB#242, AB#244/245: vista, resolución y vencimiento de casos.
+- AB#248: verificación del token de administrador.
+- AB#217/218/236/237 y AB#258/260: base parcial; las tareas YAML y PostgreSQL
+  siguen abiertas.
 
-## Traceability
+## Publicación
 
-Existing Azure work items: AB#221 (PBI), AB#222 (bootstrap),
-AB#223 (workflows/templates) and AB#224 (container configuration).
-Local thesis context and evidence are maintained outside this repository.
-The local Q&A assessment advances AB#230/231 (policy evaluation and tests).
-Local policy loading and decision snapshots provide partial groundwork for
-AB#217/218/236/237 and AB#258/260. They do not complete the YAML or PostgreSQL
-tasks. Protected review cases advance AB#240/241 locally; the PostgreSQL
-repository, 202 response, request evidence and explanation remain pending.
-Administrator token verification implements AB#248 locally.
-Review resolutions and expiry advance AB#244/245 and the case view advances
-AB#242. Next: release through the PEP and the 202 response, the agreed audit
-guarantees and PostgreSQL. The separate
-rag-service /ask integration remains conditional on contract, data and scope.
-
-## Publication
-
-Sync before starting and push feature branches after their checks pass. Opening
-pull requests, merging and deployment require the owner's approval, because a
-merge to `develop` deploys to staging automatically. See section 9 of
-[the engineering standards](docs/engineering-standards.md). Local thesis
-documents and AGENTS.md stay outside Git.
-## Retrospective Q&A sampling
-
-An administrator can create and retrieve a reproducible sample of prepared
-Q&A deliveries. See the [v1 sample API](docs/contracts/qa-samples-v1.md).
-### Local recommender governance
-
-Set the recommender origin, a writable database and an external HMAC key using
-the variables in `.env.example`. The governed route evaluates applied fairness
-settings, records the assessment and uses the shared administrator review
-workflow. Use synthetic data with the local SQLite store.
-See the [HTTP contract](docs/contracts/ethical-recommender-recommend.v1.md).
+Sincroniza antes de empezar y sube las ramas `feature/*` cuando pasen las
+comprobaciones. Abrir PR, fusionar y desplegar requieren aprobación del
+responsable: fusionar en `develop` despliega en staging automáticamente. Ver la
+sección 9 de los [estándares de ingeniería](docs/engineering-standards.md).

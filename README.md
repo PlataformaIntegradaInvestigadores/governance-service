@@ -285,3 +285,10 @@ documents and AGENTS.md stay outside Git.
 
 An administrator can create and retrieve a reproducible sample of prepared
 Q&A deliveries. See the [v1 sample API](docs/contracts/qa-samples-v1.md).
+### Local recommender governance
+
+Set the recommender origin, a writable database and an external HMAC key using
+the variables in `.env.example`. The governed route evaluates applied fairness
+settings, records the assessment and uses the shared administrator review
+workflow. Use synthetic data with the local SQLite store.
+See the [HTTP contract](docs/contracts/ethical-recommender-recommend.v1.md).

@@ -10,6 +10,7 @@ from app.domain.repositories import (
     ReviewResolutionRepository,
 )
 from app.domain.resolution import (
+    InvalidRecommendationResolutionError,
     JustificationRequiredError,
     ReviewCaseAlreadyResolvedError,
     ReviewCaseExpiredError,
@@ -18,7 +19,13 @@ from app.domain.resolution import (
     ReviewResolution,
     justification_required,
 )
-from app.domain.review import RetainedQaContent, RetainedQaPair, ReviewCase
+from app.domain.review import (
+    RecommendationSelection,
+    RetainedQaContent,
+    RetainedQaPair,
+    RetainedRecommendation,
+    ReviewCase,
+)
 from app.domain.supervision import Supervisor
 
 
@@ -86,14 +93,13 @@ class ReviewCases:
         outcome: ReviewOutcome,
         justification: str | None = None,
         modified_pairs: tuple[RetainedQaPair, ...] | None = None,
+        retained_ranks: tuple[int, ...] | None = None,
     ) -> ResolutionResult:
         if outcome is ReviewOutcome.EXPIRED:
             raise ValueError("Expiry is recorded by the service, not a supervisor")
         case = self._case(case_id)
-        content = (
-            RetainedQaContent(modified_pairs, case.content.source_article_ids)
-            if modified_pairs is not None
-            else None
+        content = self._modified_content(
+            case, outcome, justification, modified_pairs, retained_ranks
         )
         requested = ReviewResolution(
             str(uuid4()),
@@ -119,6 +125,41 @@ class ReviewCases:
         except ReviewCaseAlreadyResolvedError:
             return self._replay(self._resolutions.get(case_id), requested)
         return ResolutionResult(requested, created=True)
+
+    def _modified_content(
+        self,
+        case: ReviewCase,
+        outcome: ReviewOutcome,
+        justification: str | None,
+        pairs: tuple[RetainedQaPair, ...] | None,
+        ranks: tuple[int, ...] | None,
+    ) -> RetainedQaContent | RecommendationSelection | None:
+        if isinstance(case.content, RetainedRecommendation):
+            original = case.content
+            expected = (
+                original.allowed_ranks if outcome is ReviewOutcome.MODIFY else None
+            )
+            if (
+                pairs is not None
+                or outcome.value != original.permitted_outcome
+                or ranks != expected
+            ):
+                raise InvalidRecommendationResolutionError
+            if (
+                outcome is not ReviewOutcome.REJECT
+                or original.require_rejection_justification
+            ) and not (justification or "").strip():
+                raise JustificationRequiredError("This outcome needs a justification")
+            return (
+                RecommendationSelection(original.allowed_ranks)
+                if outcome is ReviewOutcome.MODIFY
+                else None
+            )
+        if ranks is not None:
+            raise InvalidRecommendationResolutionError
+        if pairs is None:
+            return None
+        return RetainedQaContent(pairs, case.content.source_article_ids)
 
     def expire_overdue(self) -> int:
         """Record an expiry for every pending case whose window has closed."""

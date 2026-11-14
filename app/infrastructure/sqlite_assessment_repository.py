@@ -15,14 +15,17 @@ from app.domain.qa import (
     Verdict,
 )
 from app.domain.qa_sampling import QaSample, QaSampleNotFoundError, QaSamplingPolicy
+from app.domain.recommender import RecommenderPolicy
 from app.domain.resolution import (
     ReviewCaseAlreadyResolvedError,
     ReviewOutcome,
     ReviewResolution,
 )
 from app.domain.review import (
+    RecommendationSelection,
     RetainedQaContent,
     RetainedQaPair,
+    RetainedRecommendation,
     ReviewCase,
     ReviewCaseIntegrityError,
     require_review_case_link,
@@ -62,6 +65,16 @@ CREATE TABLE IF NOT EXISTS policies (
     PRIMARY KEY (policy_id, version)
 );
 {_ASSESSMENTS}
+CREATE TABLE IF NOT EXISTS recommender_audit (
+    assessment_id TEXT PRIMARY KEY NOT NULL REFERENCES assessments(assessment_id),
+    metadata_json TEXT NOT NULL
+);
+CREATE TRIGGER IF NOT EXISTS recommender_audit_no_update
+BEFORE UPDATE ON recommender_audit
+BEGIN SELECT RAISE(ABORT, 'Recommendation audit is append-only'); END;
+CREATE TRIGGER IF NOT EXISTS recommender_audit_no_delete
+BEFORE DELETE ON recommender_audit
+BEGIN SELECT RAISE(ABORT, 'Recommendation audit is append-only'); END;
 CREATE TABLE IF NOT EXISTS qa_deliveries (
     assessment_id TEXT PRIMARY KEY NOT NULL REFERENCES assessments(assessment_id),
     prepared_at TEXT NOT NULL,
@@ -170,7 +183,13 @@ def _sha256(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def _content_json(content: RetainedQaContent) -> str:
+def _content_json(
+    content: RetainedQaContent | RetainedRecommendation | RecommendationSelection,
+) -> str:
+    if isinstance(content, RecommendationSelection):
+        return json.dumps({"retained_ranks": content.ranks})
+    if isinstance(content, RetainedRecommendation):
+        return json.dumps({"recommendation": asdict(content)}, sort_keys=True)
     document = {
         "qa_pairs": [
             {"question": pair.question, "answer": pair.answer}
@@ -183,8 +202,16 @@ def _content_json(content: RetainedQaContent) -> str:
     )
 
 
-def _read_content(document_json: str) -> RetainedQaContent:
+def _read_content(
+    document_json: str,
+) -> RetainedQaContent | RetainedRecommendation | RecommendationSelection:
     document = json.loads(document_json)
+    if "retained_ranks" in document:
+        return RecommendationSelection(tuple(document["retained_ranks"]))
+    if "recommendation" in document:
+        recommendation = document["recommendation"]
+        recommendation["allowed_ranks"] = tuple(recommendation["allowed_ranks"])
+        return RetainedRecommendation(**recommendation)
     return RetainedQaContent(
         tuple(
             RetainedQaPair(pair["question"], pair["answer"])
@@ -204,7 +231,12 @@ class SqliteAssessmentRepository:
         self._path = path
         _initialize(path)
 
-    def save(self, record: RecordedAssessment, review_case: ReviewCase | None) -> None:
+    def save(
+        self,
+        record: RecordedAssessment,
+        review_case: ReviewCase | None,
+        recommendation_audit: dict[str, object] | None = None,
+    ) -> None:
         require_review_case_link(record, review_case)
         policy = record.policy
         assessment = record.assessment
@@ -214,7 +246,7 @@ class SqliteAssessmentRepository:
         ):
             raise ValueError("Assessment and policy identities must match")
         policy_fields = asdict(policy)
-        if not policy.allow_complete:
+        if isinstance(policy, QaPolicy) and not policy.allow_complete:
             # Keep existing review-only snapshots byte-for-byte compatible.
             del policy_fields["allow_complete"]
         snapshot = json.dumps(policy_fields, sort_keys=True, separators=(",", ":"))
@@ -257,6 +289,11 @@ class SqliteAssessmentRepository:
                         _sha256(content),
                     ),
                 )
+            if recommendation_audit is not None:
+                connection.execute(
+                    "INSERT INTO recommender_audit VALUES (?, ?)",
+                    (record.assessment_id, json.dumps(recommendation_audit)),
+                )
 
     def get(self, assessment_id: str) -> RecordedAssessment | None:
         with closing(sqlite3.connect(self._path)) as connection:
@@ -273,10 +310,16 @@ class SqliteAssessmentRepository:
             return None
         if _sha256(row["snapshot_json"]) != row["sha256"]:
             raise ValueError("Stored policy snapshot digest mismatch")
+        fields = json.loads(row["snapshot_json"])
+        policy = (
+            RecommenderPolicy(**fields)
+            if "protected_attribute" in fields
+            else QaPolicy(**fields)
+        )
         return RecordedAssessment(
             row["assessment_id"],
             datetime.fromisoformat(row["created_at"]),
-            QaPolicy(**json.loads(row["snapshot_json"])),
+            policy,
             Assessment(
                 Verdict(row["verdict"]),
                 row["policy_id"],
@@ -470,11 +513,16 @@ class SqliteReviewCaseRepository:
         case_id, assessment_id, created_at, content, digest = row
         if _sha256(content) != digest:
             raise ReviewCaseIntegrityError("Stored review case digest mismatch")
+        parsed = _read_content(content)
+        if isinstance(parsed, RecommendationSelection):
+            raise ReviewCaseIntegrityError(
+                "Stored case has selection instead of content"
+            )
         return ReviewCase(
             case_id,
             assessment_id,
             datetime.fromisoformat(created_at),
-            _read_content(content),
+            parsed,
         )
 
 
@@ -535,6 +583,9 @@ class SqliteReviewResolutionRepository:
         content = row["modified_content_json"]
         if content is not None and _sha256(content) != row["modified_content_sha256"]:
             raise ReviewCaseIntegrityError("Stored resolution digest mismatch")
+        modified = _read_content(content) if content is not None else None
+        if isinstance(modified, RetainedRecommendation):
+            raise ReviewCaseIntegrityError("Stored resolution has full recommendation")
         supervisor = None
         if row["supervisor_identity_id"] is not None:
             snapshot = json.loads(row["supervisor_snapshot_json"])
@@ -549,7 +600,7 @@ class SqliteReviewResolutionRepository:
             datetime.fromisoformat(row["expires_at"]),
             supervisor,
             row["justification"],
-            _read_content(content) if content is not None else None,
+            modified,
         )
 
     def pending_case_ids(self, created_before: datetime) -> tuple[str, ...]:

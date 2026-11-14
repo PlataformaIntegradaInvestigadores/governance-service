@@ -24,8 +24,16 @@ class Settings(BaseSettings):
     qa_policy_path: Path = Path("policies/search-qa-review.draft-1.json")
     qa_retain_synthetic_deliveries: bool = False
     qa_release_key: SecretStr | None = Field(default=None, min_length=32)
+    recommender_upstream_base_url: AnyHttpUrl | None = None
+    recommender_timeout_seconds: float = Field(default=30.0, gt=0, le=120)
+    recommender_policy_path: Path = Path("policies/recommender-fairness.draft-1.json")
+    recommender_hmac_key: SecretStr | None = Field(default=None, min_length=32)
 
-    @field_validator("qa_upstream_base_url", "admin_verifier_base_url")
+    @field_validator(
+        "qa_upstream_base_url",
+        "admin_verifier_base_url",
+        "recommender_upstream_base_url",
+    )
     @classmethod
     def validate_service_origin(cls, value: AnyHttpUrl | None) -> AnyHttpUrl | None:
         if value is not None and (
@@ -60,4 +68,8 @@ class Settings(BaseSettings):
             self.database is None or self.qa_release_key is None
         ):
             raise ValueError("Governed Q&A requires a database and a release key")
+        if self.recommender_upstream_base_url is not None and (
+            self.database is None or self.recommender_hmac_key is None
+        ):
+            raise ValueError("Governed recommendations require a database and HMAC key")
         return self

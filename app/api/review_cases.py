@@ -1,3 +1,4 @@
+import json
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Request, Response
@@ -11,7 +12,7 @@ from app.domain.resolution import (
     ReviewOutcome,
     ReviewResolution,
 )
-from app.domain.review import RetainedQaPair
+from app.domain.review import RetainedQaContent, RetainedQaPair
 from app.domain.supervision import Supervisor
 
 router = APIRouter(prefix="/review-cases", tags=["Review cases"])
@@ -45,11 +46,15 @@ class ResolutionRequest(BaseModel):
         | None
     ) = None
     qa_pairs: list[_Pair] | None = Field(default=None, min_length=1, max_length=50)
+    retained_ranks: list[Annotated[int, Field(strict=True, gt=0)]] | None = Field(
+        default=None, min_length=1, max_length=1000
+    )
 
     @model_validator(mode="after")
     def pairs_only_for_modify(self) -> "ResolutionRequest":
-        if (self.outcome == "modify") != (self.qa_pairs is not None):
-            raise ValueError("qa_pairs are required for modify and only for modify")
+        edits = (self.qa_pairs is not None) + (self.retained_ranks is not None)
+        if edits != (self.outcome == "modify"):
+            raise ValueError("Modify requires exactly one edit")
         return self
 
 
@@ -90,6 +95,18 @@ def view_case(case_id: str, reviews: _Reviews, response: Response) -> dict:
         status = view.resolution.outcome.value
     else:
         status = "expired" if view.expired else "pending"
+    content = view.case.content
+    body = (
+        {"recommendation": json.loads(content.response_json)}
+        if not isinstance(content, RetainedQaContent)
+        else {
+            "qa_pairs": [
+                {"question": pair.question, "answer": pair.answer}
+                for pair in content.qa_pairs
+            ],
+            "source_article_ids": list(content.source_article_ids),
+        }
+    )
     return {
         "case_id": view.case.case_id,
         "assessment_id": view.case.assessment_id,
@@ -101,11 +118,7 @@ def view_case(case_id: str, reviews: _Reviews, response: Response) -> dict:
             "version": view.record.policy.version,
         },
         "reason_codes": list(view.record.assessment.reason_codes),
-        "qa_pairs": [
-            {"question": pair.question, "answer": pair.answer}
-            for pair in view.case.content.qa_pairs
-        ],
-        "source_article_ids": list(view.case.content.source_article_ids),
+        **body,
         "resolution": (
             _resolution(view.resolution) if view.resolution is not None else None
         ),
@@ -126,7 +139,12 @@ def resolve_case(
         else None
     )
     result = reviews.resolve(
-        case_id, admin, ReviewOutcome(body.outcome), body.justification, pairs
+        case_id,
+        admin,
+        ReviewOutcome(body.outcome),
+        body.justification,
+        pairs,
+        tuple(body.retained_ranks) if body.retained_ranks is not None else None,
     )
     response.status_code = 201 if result.created else 200
     response.headers.update(_NO_STORE)

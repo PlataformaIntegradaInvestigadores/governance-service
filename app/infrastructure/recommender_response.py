@@ -10,7 +10,9 @@ from app.domain.recommender import (
     RecommenderAssessment,
     RecommenderPolicy,
     assess_recommendations,
+    review_plan,
 )
+from app.domain.review import RetainedRecommendation
 
 
 class _Schema(BaseModel):
@@ -48,12 +50,12 @@ def load_recommender_policy(path: Path) -> RecommenderPolicy:
 
 class _Author(_Schema):
     author_id: str = Field(min_length=1)
-
-
-class _Profile(_Author):
     name: str | None
     institution: str = Field(min_length=1)
     low_visibility: bool
+
+
+class _Profile(_Author):
     rank: int = Field(gt=0)
     baseline_rank: int = Field(gt=0)
     relevance_score: float
@@ -90,10 +92,10 @@ class _Parameters(_Schema):
 
 
 class _Response(_Schema):
-    model: object
+    model: str
     team: list[_Author]
     recommendations: list[_Profile]
-    fairness_metrics: _Fairness
+    fairness_metrics: dict[str, float]
     diagnostics: _Diagnostics
     parameters: _Parameters
 
@@ -101,17 +103,33 @@ class _Response(_Schema):
 def assess_recommender_response(
     status: int, body: bytes, policy: RecommenderPolicy
 ) -> RecommenderAssessment:
+    return evaluate_recommender_response(status, body, policy)[0]
+
+
+def evaluate_recommender_response(
+    status: int, body: bytes, policy: RecommenderPolicy
+) -> tuple[RecommenderAssessment, RecommendationList | None]:
     if status in (404, 422):
-        return RecommenderAssessment("client_error")
+        return RecommenderAssessment("client_error"), None
     if status != 200:
-        return RecommenderAssessment("deny", ("UPSTREAM_ERROR",))
+        return RecommenderAssessment("deny", ("UPSTREAM_ERROR",)), None
     try:
-        response = _Response.model_validate(json.loads(body))
+        document = json.loads(body)
+        json.dumps(document, allow_nan=False, ensure_ascii=False).encode()
+        response = _Response.model_validate(document)
+        metrics = (
+            _Fairness.model_validate(response.fairness_metrics)
+            if response.recommendations or response.fairness_metrics
+            else _Fairness(low_visibility_share=0, pool_low_visibility_share=0)
+        )
         profiles: list[Recommendation] = []
         for profile in response.recommendations:
             protected = profile.model_dump().get(policy.protected_attribute)
             if not isinstance(protected, bool):
-                return RecommenderAssessment("deny", ("UPSTREAM_CONTRACT_INVALID",))
+                return (
+                    RecommenderAssessment("deny", ("UPSTREAM_CONTRACT_INVALID",)),
+                    None,
+                )
             profiles.append(
                 Recommendation(
                     author_id=profile.author_id,
@@ -125,11 +143,10 @@ def assess_recommender_response(
                     selection_reason=profile.selection_reason,
                 )
             )
-    except (UnicodeError, ValueError):
-        return RecommenderAssessment("deny", ("UPSTREAM_CONTRACT_INVALID",))
+    except (ValueError, RecursionError):
+        return RecommenderAssessment("deny", ("UPSTREAM_CONTRACT_INVALID",)), None
     rerank = response.parameters.rerank
     diag = response.diagnostics
-    metrics = response.fairness_metrics
     result = RecommendationList(
         response.parameters.top_k,
         frozenset(author.author_id for author in response.team),
@@ -148,4 +165,29 @@ def assess_recommender_response(
         metrics.low_visibility_share,
         metrics.pool_low_visibility_share,
     )
-    return assess_recommendations(result, policy)
+    return assess_recommendations(result, policy), result
+
+
+def _without_names(value: object) -> object:
+    if isinstance(value, list):
+        return [_without_names(item) for item in value]
+    if isinstance(value, dict):
+        return {
+            key: _without_names(item) for key, item in value.items() if key != "name"
+        }
+    return value
+
+
+def retain_recommendation(
+    body: bytes,
+    result: RecommendationList,
+    policy: RecommenderPolicy,
+    reasons: tuple[str, ...],
+) -> RetainedRecommendation:
+    outcome, ranks = review_plan(result, policy, reasons)
+    return RetainedRecommendation(
+        json.dumps(_without_names(json.loads(body))),
+        ranks,
+        outcome,
+        policy.require_rejection_justification,
+    )

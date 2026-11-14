@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
 
-from app.domain.review import RetainedQaContent
+from app.domain.review import RecommendationSelection, RetainedQaContent
 from app.domain.supervision import Supervisor
 
 
@@ -36,6 +36,10 @@ class JustificationRequiredError(ValueError):
     pass
 
 
+class InvalidRecommendationResolutionError(ValueError):
+    pass
+
+
 def _identity_of(supervisor: Supervisor | None) -> str | None:
     return supervisor.identity_id if supervisor is not None else None
 
@@ -61,7 +65,7 @@ class ReviewResolution:
     expires_at: datetime
     supervisor: Supervisor | None
     justification: str | None = field(default=None, repr=False)
-    modified_content: RetainedQaContent | None = None
+    modified_content: RetainedQaContent | RecommendationSelection | None = None
 
     def __post_init__(self) -> None:
         if self.resolved_at.utcoffset() is None or self.expires_at.utcoffset() is None:

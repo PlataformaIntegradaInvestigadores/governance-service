@@ -18,6 +18,7 @@ class RecommenderPolicy:
     protected_attribute: str
     unknown_institution: str
     require_rejection_justification: bool
+    policy_id: Literal["recommender-fairness"] = "recommender-fairness"
 
 
 class AppliedRerank(TypedDict):
@@ -171,3 +172,42 @@ def assess_recommendations(
         retention.append("PROTECTED_ATTRIBUTE_UNKNOWN")
         reasons.append("PROTECTED_ATTRIBUTE_UNKNOWN")
     return RecommenderAssessment("retain" if retention else "permit", tuple(reasons))
+
+
+def review_plan(
+    result: RecommendationList, policy: RecommenderPolicy, reasons: tuple[str, ...]
+) -> tuple[str, tuple[int, ...]]:
+    if {"FAIRNESS_DISABLED", "LOW_VISIBILITY_QUOTA_UNMET"}.intersection(reasons):
+        return "reject", ()
+    applied = result.rerank
+    cap = min(
+        policy.max_per_institution,
+        applied["max_per_institution"] or policy.max_per_institution,
+    )
+    share = max(policy.min_protected_share, applied["min_protected_share"])
+    counts: Counter[str] = Counter()
+    kept: list[Recommendation] = []
+    for profile in result.profiles:
+        institution = profile["institution"]
+        if institution == policy.unknown_institution and profile["name"] is None:
+            continue
+        counts[institution] += institution != policy.unknown_institution
+        if counts[institution] > cap and "INSTITUTION_CONCENTRATION" in reasons:
+            continue
+        kept.append(profile)
+    if (
+        not kept
+        or sum(p["protected"] for p in kept) < quota_minimum(share, len(kept))
+        or any(
+            count > cap
+            for count in Counter(
+                p["institution"]
+                for p in kept
+                if p["institution"] != policy.unknown_institution
+            ).values()
+        )
+    ):
+        return "reject", ()
+    if len(kept) == len(result.profiles):
+        return "approve", ()
+    return "modify", tuple(p["rank"] for p in kept)

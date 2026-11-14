@@ -99,11 +99,14 @@ def review_status(
         return _response(202, {"review_id": str(review_id)})
     if view.resolution.outcome not in RELEASING_OUTCOMES:
         return _denied(request)
+    content = view.resolution.modified_content or view.case.content
+    if not isinstance(content, RetainedQaContent):
+        return _denied(request)
     try:
         return _deliver(
             request,
             view.record.assessment_id,
-            view.resolution.modified_content or view.case.content,
+            content,
         )
     except (OSError, ValueError, sqlite3.Error):
         return _denied(request)

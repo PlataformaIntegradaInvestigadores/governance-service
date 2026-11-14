@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -43,7 +45,20 @@ class ReviewCase:
     case_id: str
     assessment_id: str
     created_at: datetime
-    content: RetainedQaContent
+    content: RetainedQaContent | RetainedRecommendation
+
+
+@dataclass(frozen=True, repr=False)
+class RetainedRecommendation:
+    response_json: str
+    allowed_ranks: tuple[int, ...]
+    permitted_outcome: str
+    require_rejection_justification: bool
+
+
+@dataclass(frozen=True)
+class RecommendationSelection:
+    ranks: tuple[int, ...]
 
 
 def require_review_case_link(

@@ -1,0 +1,963 @@
+[
+ {
+  "id": "rene_pool",
+  "description": "Datos reales, referencia pool: solo la ventana 3 queda fuera (DI 0,79); no escala",
+  "params": {
+   "window": 100,
+   "min_selected_per_group": 30,
+   "di_min": 0.8,
+   "spd_range": [
+    -0.1,
+    0.1
+   ],
+   "reference": "pool",
+   "population_share": 0.1278047500328041,
+   "escalate_after": 3,
+   "return_after": 3
+  },
+  "windows": [
+   {
+    "S_p": 84,
+    "S_np": 1916,
+    "C_p": 425,
+    "C_np": 9575
+   },
+   {
+    "S_p": 87,
+    "S_np": 1913,
+    "C_p": 447,
+    "C_np": 9553
+   },
+   {
+    "S_p": 80,
+    "S_np": 1920,
+    "C_p": 502,
+    "C_np": 9498
+   }
+  ],
+  "expected": {
+   "windows": [
+    {
+     "window": 1,
+     "S_p": 84,
+     "S_np": 1916,
+     "C_p": 425,
+     "C_np": 9575,
+     "reference": "pool",
+     "status": "within",
+     "rate_protected": 0.197647,
+     "rate_reference": 0.200104,
+     "DI": 0.9877,
+     "SPD": -0.0025,
+     "wilson95_protected": [
+      0.162568,
+      0.238143
+     ],
+     "wilson95_reference": [
+      0.192212,
+      0.208238
+     ],
+     "level_after": "automatic"
+    },
+    {
+     "window": 2,
+     "S_p": 87,
+     "S_np": 1913,
+     "C_p": 447,
+     "C_np": 9553,
+     "reference": "pool",
+     "status": "within",
+     "rate_protected": 0.194631,
+     "rate_reference": 0.200251,
+     "DI": 0.9719,
+     "SPD": -0.0056,
+     "wilson95_protected": [
+      0.160594,
+      0.233871
+     ],
+     "wilson95_reference": [
+      0.192347,
+      0.208396
+     ],
+     "level_after": "automatic"
+    },
+    {
+     "window": 3,
+     "S_p": 80,
+     "S_np": 1920,
+     "C_p": 502,
+     "C_np": 9498,
+     "reference": "pool",
+     "status": "out",
+     "rate_protected": 0.159363,
+     "rate_reference": 0.202148,
+     "DI": 0.7883,
+     "SPD": -0.0428,
+     "wilson95_protected": [
+      0.129949,
+      0.19395
+     ],
+     "wilson95_reference": [
+      0.194192,
+      0.210344
+     ],
+     "level_after": "automatic"
+    }
+   ],
+   "transitions": [],
+   "final_level": "automatic"
+  }
+ },
+ {
+  "id": "rene_poblacion",
+  "description": "Datos reales, referencia población: las 3 ventanas fuera; escala en la 3",
+  "params": {
+   "window": 100,
+   "min_selected_per_group": 30,
+   "di_min": 0.8,
+   "spd_range": [
+    -0.1,
+    0.1
+   ],
+   "reference": "population",
+   "population_share": 0.1278047500328041,
+   "escalate_after": 3,
+   "return_after": 3
+  },
+  "windows": [
+   {
+    "S_p": 84,
+    "S_np": 1916,
+    "C_p": 425,
+    "C_np": 9575
+   },
+   {
+    "S_p": 87,
+    "S_np": 1913,
+    "C_p": 447,
+    "C_np": 9553
+   },
+   {
+    "S_p": 80,
+    "S_np": 1920,
+    "C_p": 502,
+    "C_np": 9498
+   }
+  ],
+  "expected": {
+   "windows": [
+    {
+     "window": 1,
+     "S_p": 84,
+     "S_np": 1916,
+     "C_p": 425,
+     "C_np": 9575,
+     "reference": "population",
+     "status": "out",
+     "rate_protected": 0.065725,
+     "rate_reference": 0.219676,
+     "DI": 0.2992,
+     "SPD": -0.154,
+     "level_after": "automatic"
+    },
+    {
+     "window": 2,
+     "S_p": 87,
+     "S_np": 1913,
+     "C_p": 447,
+     "C_np": 9553,
+     "reference": "population",
+     "status": "out",
+     "rate_protected": 0.068073,
+     "rate_reference": 0.219332,
+     "DI": 0.3104,
+     "SPD": -0.1513,
+     "level_after": "automatic"
+    },
+    {
+     "window": 3,
+     "S_p": 80,
+     "S_np": 1920,
+     "C_p": 502,
+     "C_np": 9498,
+     "reference": "population",
+     "status": "out",
+     "rate_protected": 0.062595,
+     "rate_reference": 0.220134,
+     "DI": 0.2844,
+     "SPD": -0.1575,
+     "level_after": "mandatory_review"
+    }
+   ],
+   "transitions": [
+    {
+     "window": 3,
+     "from": "automatic",
+     "to": "mandatory_review",
+     "reason": "out_of_threshold"
+    }
+   ],
+   "final_level": "mandatory_review"
+  }
+ },
+ {
+  "id": "escala_y_retorna",
+  "description": "3 fuera escalan; 3 dentro devuelven al nivel automático",
+  "params": {
+   "window": 100,
+   "min_selected_per_group": 30,
+   "di_min": 0.8,
+   "spd_range": [
+    -0.1,
+    0.1
+   ],
+   "reference": "pool",
+   "population_share": 0.1278047500328041,
+   "escalate_after": 3,
+   "return_after": 3
+  },
+  "windows": [
+   {
+    "S_p": 40,
+    "S_np": 1960,
+    "C_p": 450,
+    "C_np": 9550
+   },
+   {
+    "S_p": 40,
+    "S_np": 1960,
+    "C_p": 450,
+    "C_np": 9550
+   },
+   {
+    "S_p": 40,
+    "S_np": 1960,
+    "C_p": 450,
+    "C_np": 9550
+   },
+   {
+    "S_p": 90,
+    "S_np": 1910,
+    "C_p": 450,
+    "C_np": 9550
+   },
+   {
+    "S_p": 90,
+    "S_np": 1910,
+    "C_p": 450,
+    "C_np": 9550
+   },
+   {
+    "S_p": 90,
+    "S_np": 1910,
+    "C_p": 450,
+    "C_np": 9550
+   }
+  ],
+  "expected": {
+   "windows": [
+    {
+     "window": 1,
+     "S_p": 40,
+     "S_np": 1960,
+     "C_p": 450,
+     "C_np": 9550,
+     "reference": "pool",
+     "status": "out",
+     "rate_protected": 0.088889,
+     "rate_reference": 0.205236,
+     "DI": 0.4331,
+     "SPD": -0.1163,
+     "wilson95_protected": [
+      0.065956,
+      0.118781
+     ],
+     "wilson95_reference": [
+      0.197255,
+      0.213453
+     ],
+     "level_after": "automatic"
+    },
+    {
+     "window": 2,
+     "S_p": 40,
+     "S_np": 1960,
+     "C_p": 450,
+     "C_np": 9550,
+     "reference": "pool",
+     "status": "out",
+     "rate_protected": 0.088889,
+     "rate_reference": 0.205236,
+     "DI": 0.4331,
+     "SPD": -0.1163,
+     "wilson95_protected": [
+      0.065956,
+      0.118781
+     ],
+     "wilson95_reference": [
+      0.197255,
+      0.213453
+     ],
+     "level_after": "automatic"
+    },
+    {
+     "window": 3,
+     "S_p": 40,
+     "S_np": 1960,
+     "C_p": 450,
+     "C_np": 9550,
+     "reference": "pool",
+     "status": "out",
+     "rate_protected": 0.088889,
+     "rate_reference": 0.205236,
+     "DI": 0.4331,
+     "SPD": -0.1163,
+     "wilson95_protected": [
+      0.065956,
+      0.118781
+     ],
+     "wilson95_reference": [
+      0.197255,
+      0.213453
+     ],
+     "level_after": "mandatory_review"
+    },
+    {
+     "window": 4,
+     "S_p": 90,
+     "S_np": 1910,
+     "C_p": 450,
+     "C_np": 9550,
+     "reference": "pool",
+     "status": "within",
+     "rate_protected": 0.2,
+     "rate_reference": 0.2,
+     "DI": 1.0,
+     "SPD": 0.0,
+     "wilson95_protected": [
+      0.165651,
+      0.239427
+     ],
+     "wilson95_reference": [
+      0.192099,
+      0.208142
+     ],
+     "level_after": "mandatory_review"
+    },
+    {
+     "window": 5,
+     "S_p": 90,
+     "S_np": 1910,
+     "C_p": 450,
+     "C_np": 9550,
+     "reference": "pool",
+     "status": "within",
+     "rate_protected": 0.2,
+     "rate_reference": 0.2,
+     "DI": 1.0,
+     "SPD": 0.0,
+     "wilson95_protected": [
+      0.165651,
+      0.239427
+     ],
+     "wilson95_reference": [
+      0.192099,
+      0.208142
+     ],
+     "level_after": "mandatory_review"
+    },
+    {
+     "window": 6,
+     "S_p": 90,
+     "S_np": 1910,
+     "C_p": 450,
+     "C_np": 9550,
+     "reference": "pool",
+     "status": "within",
+     "rate_protected": 0.2,
+     "rate_reference": 0.2,
+     "DI": 1.0,
+     "SPD": 0.0,
+     "wilson95_protected": [
+      0.165651,
+      0.239427
+     ],
+     "wilson95_reference": [
+      0.192099,
+      0.208142
+     ],
+     "level_after": "automatic"
+    }
+   ],
+   "transitions": [
+    {
+     "window": 3,
+     "from": "automatic",
+     "to": "mandatory_review",
+     "reason": "out_of_threshold"
+    },
+    {
+     "window": 6,
+     "from": "mandatory_review",
+     "to": "automatic",
+     "reason": "back_within_threshold"
+    }
+   ],
+   "final_level": "automatic"
+  }
+ },
+ {
+  "id": "no_evaluable_no_corta",
+  "description": "Una ventana no evaluable entre ventanas fuera no reinicia la cuenta",
+  "params": {
+   "window": 100,
+   "min_selected_per_group": 30,
+   "di_min": 0.8,
+   "spd_range": [
+    -0.1,
+    0.1
+   ],
+   "reference": "pool",
+   "population_share": 0.1278047500328041,
+   "escalate_after": 3,
+   "return_after": 3
+  },
+  "windows": [
+   {
+    "S_p": 40,
+    "S_np": 1960,
+    "C_p": 450,
+    "C_np": 9550
+   },
+   {
+    "S_p": 40,
+    "S_np": 1960,
+    "C_p": 450,
+    "C_np": 9550
+   },
+   {
+    "S_p": 20,
+    "S_np": 1980,
+    "C_p": 450,
+    "C_np": 9550
+   },
+   {
+    "S_p": 40,
+    "S_np": 1960,
+    "C_p": 450,
+    "C_np": 9550
+   }
+  ],
+  "expected": {
+   "windows": [
+    {
+     "window": 1,
+     "S_p": 40,
+     "S_np": 1960,
+     "C_p": 450,
+     "C_np": 9550,
+     "reference": "pool",
+     "status": "out",
+     "rate_protected": 0.088889,
+     "rate_reference": 0.205236,
+     "DI": 0.4331,
+     "SPD": -0.1163,
+     "wilson95_protected": [
+      0.065956,
+      0.118781
+     ],
+     "wilson95_reference": [
+      0.197255,
+      0.213453
+     ],
+     "level_after": "automatic"
+    },
+    {
+     "window": 2,
+     "S_p": 40,
+     "S_np": 1960,
+     "C_p": 450,
+     "C_np": 9550,
+     "reference": "pool",
+     "status": "out",
+     "rate_protected": 0.088889,
+     "rate_reference": 0.205236,
+     "DI": 0.4331,
+     "SPD": -0.1163,
+     "wilson95_protected": [
+      0.065956,
+      0.118781
+     ],
+     "wilson95_reference": [
+      0.197255,
+      0.213453
+     ],
+     "level_after": "automatic"
+    },
+    {
+     "window": 3,
+     "S_p": 20,
+     "S_np": 1980,
+     "C_p": 450,
+     "C_np": 9550,
+     "reference": "pool",
+     "status": "not_evaluable",
+     "reason": "insufficient_selections",
+     "level_after": "automatic"
+    },
+    {
+     "window": 4,
+     "S_p": 40,
+     "S_np": 1960,
+     "C_p": 450,
+     "C_np": 9550,
+     "reference": "pool",
+     "status": "out",
+     "rate_protected": 0.088889,
+     "rate_reference": 0.205236,
+     "DI": 0.4331,
+     "SPD": -0.1163,
+     "wilson95_protected": [
+      0.065956,
+      0.118781
+     ],
+     "wilson95_reference": [
+      0.197255,
+      0.213453
+     ],
+     "level_after": "mandatory_review"
+    }
+   ],
+   "transitions": [
+    {
+     "window": 4,
+     "from": "automatic",
+     "to": "mandatory_review",
+     "reason": "out_of_threshold"
+    }
+   ],
+   "final_level": "mandatory_review"
+  }
+ },
+ {
+  "id": "alternancia",
+  "description": "Fuera y dentro alternadas: nunca escala",
+  "params": {
+   "window": 100,
+   "min_selected_per_group": 30,
+   "di_min": 0.8,
+   "spd_range": [
+    -0.1,
+    0.1
+   ],
+   "reference": "pool",
+   "population_share": 0.1278047500328041,
+   "escalate_after": 3,
+   "return_after": 3
+  },
+  "windows": [
+   {
+    "S_p": 40,
+    "S_np": 1960,
+    "C_p": 450,
+    "C_np": 9550
+   },
+   {
+    "S_p": 90,
+    "S_np": 1910,
+    "C_p": 450,
+    "C_np": 9550
+   },
+   {
+    "S_p": 40,
+    "S_np": 1960,
+    "C_p": 450,
+    "C_np": 9550
+   },
+   {
+    "S_p": 90,
+    "S_np": 1910,
+    "C_p": 450,
+    "C_np": 9550
+   },
+   {
+    "S_p": 40,
+    "S_np": 1960,
+    "C_p": 450,
+    "C_np": 9550
+   },
+   {
+    "S_p": 90,
+    "S_np": 1910,
+    "C_p": 450,
+    "C_np": 9550
+   }
+  ],
+  "expected": {
+   "windows": [
+    {
+     "window": 1,
+     "S_p": 40,
+     "S_np": 1960,
+     "C_p": 450,
+     "C_np": 9550,
+     "reference": "pool",
+     "status": "out",
+     "rate_protected": 0.088889,
+     "rate_reference": 0.205236,
+     "DI": 0.4331,
+     "SPD": -0.1163,
+     "wilson95_protected": [
+      0.065956,
+      0.118781
+     ],
+     "wilson95_reference": [
+      0.197255,
+      0.213453
+     ],
+     "level_after": "automatic"
+    },
+    {
+     "window": 2,
+     "S_p": 90,
+     "S_np": 1910,
+     "C_p": 450,
+     "C_np": 9550,
+     "reference": "pool",
+     "status": "within",
+     "rate_protected": 0.2,
+     "rate_reference": 0.2,
+     "DI": 1.0,
+     "SPD": 0.0,
+     "wilson95_protected": [
+      0.165651,
+      0.239427
+     ],
+     "wilson95_reference": [
+      0.192099,
+      0.208142
+     ],
+     "level_after": "automatic"
+    },
+    {
+     "window": 3,
+     "S_p": 40,
+     "S_np": 1960,
+     "C_p": 450,
+     "C_np": 9550,
+     "reference": "pool",
+     "status": "out",
+     "rate_protected": 0.088889,
+     "rate_reference": 0.205236,
+     "DI": 0.4331,
+     "SPD": -0.1163,
+     "wilson95_protected": [
+      0.065956,
+      0.118781
+     ],
+     "wilson95_reference": [
+      0.197255,
+      0.213453
+     ],
+     "level_after": "automatic"
+    },
+    {
+     "window": 4,
+     "S_p": 90,
+     "S_np": 1910,
+     "C_p": 450,
+     "C_np": 9550,
+     "reference": "pool",
+     "status": "within",
+     "rate_protected": 0.2,
+     "rate_reference": 0.2,
+     "DI": 1.0,
+     "SPD": 0.0,
+     "wilson95_protected": [
+      0.165651,
+      0.239427
+     ],
+     "wilson95_reference": [
+      0.192099,
+      0.208142
+     ],
+     "level_after": "automatic"
+    },
+    {
+     "window": 5,
+     "S_p": 40,
+     "S_np": 1960,
+     "C_p": 450,
+     "C_np": 9550,
+     "reference": "pool",
+     "status": "out",
+     "rate_protected": 0.088889,
+     "rate_reference": 0.205236,
+     "DI": 0.4331,
+     "SPD": -0.1163,
+     "wilson95_protected": [
+      0.065956,
+      0.118781
+     ],
+     "wilson95_reference": [
+      0.197255,
+      0.213453
+     ],
+     "level_after": "automatic"
+    },
+    {
+     "window": 6,
+     "S_p": 90,
+     "S_np": 1910,
+     "C_p": 450,
+     "C_np": 9550,
+     "reference": "pool",
+     "status": "within",
+     "rate_protected": 0.2,
+     "rate_reference": 0.2,
+     "DI": 1.0,
+     "SPD": 0.0,
+     "wilson95_protected": [
+      0.165651,
+      0.239427
+     ],
+     "wilson95_reference": [
+      0.192099,
+      0.208142
+     ],
+     "level_after": "automatic"
+    }
+   ],
+   "transitions": [],
+   "final_level": "automatic"
+  }
+ },
+ {
+  "id": "retorno_interrumpido",
+  "description": "Escalado, 2 dentro y 1 fuera: sigue en revisión obligatoria",
+  "params": {
+   "window": 100,
+   "min_selected_per_group": 30,
+   "di_min": 0.8,
+   "spd_range": [
+    -0.1,
+    0.1
+   ],
+   "reference": "pool",
+   "population_share": 0.1278047500328041,
+   "escalate_after": 3,
+   "return_after": 3
+  },
+  "windows": [
+   {
+    "S_p": 40,
+    "S_np": 1960,
+    "C_p": 450,
+    "C_np": 9550
+   },
+   {
+    "S_p": 40,
+    "S_np": 1960,
+    "C_p": 450,
+    "C_np": 9550
+   },
+   {
+    "S_p": 40,
+    "S_np": 1960,
+    "C_p": 450,
+    "C_np": 9550
+   },
+   {
+    "S_p": 90,
+    "S_np": 1910,
+    "C_p": 450,
+    "C_np": 9550
+   },
+   {
+    "S_p": 90,
+    "S_np": 1910,
+    "C_p": 450,
+    "C_np": 9550
+   },
+   {
+    "S_p": 40,
+    "S_np": 1960,
+    "C_p": 450,
+    "C_np": 9550
+   },
+   {
+    "S_p": 90,
+    "S_np": 1910,
+    "C_p": 450,
+    "C_np": 9550
+   }
+  ],
+  "expected": {
+   "windows": [
+    {
+     "window": 1,
+     "S_p": 40,
+     "S_np": 1960,
+     "C_p": 450,
+     "C_np": 9550,
+     "reference": "pool",
+     "status": "out",
+     "rate_protected": 0.088889,
+     "rate_reference": 0.205236,
+     "DI": 0.4331,
+     "SPD": -0.1163,
+     "wilson95_protected": [
+      0.065956,
+      0.118781
+     ],
+     "wilson95_reference": [
+      0.197255,
+      0.213453
+     ],
+     "level_after": "automatic"
+    },
+    {
+     "window": 2,
+     "S_p": 40,
+     "S_np": 1960,
+     "C_p": 450,
+     "C_np": 9550,
+     "reference": "pool",
+     "status": "out",
+     "rate_protected": 0.088889,
+     "rate_reference": 0.205236,
+     "DI": 0.4331,
+     "SPD": -0.1163,
+     "wilson95_protected": [
+      0.065956,
+      0.118781
+     ],
+     "wilson95_reference": [
+      0.197255,
+      0.213453
+     ],
+     "level_after": "automatic"
+    },
+    {
+     "window": 3,
+     "S_p": 40,
+     "S_np": 1960,
+     "C_p": 450,
+     "C_np": 9550,
+     "reference": "pool",
+     "status": "out",
+     "rate_protected": 0.088889,
+     "rate_reference": 0.205236,
+     "DI": 0.4331,
+     "SPD": -0.1163,
+     "wilson95_protected": [
+      0.065956,
+      0.118781
+     ],
+     "wilson95_reference": [
+      0.197255,
+      0.213453
+     ],
+     "level_after": "mandatory_review"
+    },
+    {
+     "window": 4,
+     "S_p": 90,
+     "S_np": 1910,
+     "C_p": 450,
+     "C_np": 9550,
+     "reference": "pool",
+     "status": "within",
+     "rate_protected": 0.2,
+     "rate_reference": 0.2,
+     "DI": 1.0,
+     "SPD": 0.0,
+     "wilson95_protected": [
+      0.165651,
+      0.239427
+     ],
+     "wilson95_reference": [
+      0.192099,
+      0.208142
+     ],
+     "level_after": "mandatory_review"
+    },
+    {
+     "window": 5,
+     "S_p": 90,
+     "S_np": 1910,
+     "C_p": 450,
+     "C_np": 9550,
+     "reference": "pool",
+     "status": "within",
+     "rate_protected": 0.2,
+     "rate_reference": 0.2,
+     "DI": 1.0,
+     "SPD": 0.0,
+     "wilson95_protected": [
+      0.165651,
+      0.239427
+     ],
+     "wilson95_reference": [
+      0.192099,
+      0.208142
+     ],
+     "level_after": "mandatory_review"
+    },
+    {
+     "window": 6,
+     "S_p": 40,
+     "S_np": 1960,
+     "C_p": 450,
+     "C_np": 9550,
+     "reference": "pool",
+     "status": "out",
+     "rate_protected": 0.088889,
+     "rate_reference": 0.205236,
+     "DI": 0.4331,
+     "SPD": -0.1163,
+     "wilson95_protected": [
+      0.065956,
+      0.118781
+     ],
+     "wilson95_reference": [
+      0.197255,
+      0.213453
+     ],
+     "level_after": "mandatory_review"
+    },
+    {
+     "window": 7,
+     "S_p": 90,
+     "S_np": 1910,
+     "C_p": 450,
+     "C_np": 9550,
+     "reference": "pool",
+     "status": "within",
+     "rate_protected": 0.2,
+     "rate_reference": 0.2,
+     "DI": 1.0,
+     "SPD": 0.0,
+     "wilson95_protected": [
+      0.165651,
+      0.239427
+     ],
+     "wilson95_reference": [
+      0.192099,
+      0.208142
+     ],
+     "level_after": "mandatory_review"
+    }
+   ],
+   "transitions": [
+    {
+     "window": 3,
+     "from": "automatic",
+     "to": "mandatory_review",
+     "reason": "out_of_threshold"
+    }
+   ],
+   "final_level": "mandatory_review"
+  }
+ }
+]

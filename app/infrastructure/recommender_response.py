@@ -23,7 +23,7 @@ class _Policy(_Schema):
     max_per_institution: int = Field(gt=0)
     min_low_visibility_share: float = Field(ge=0, le=1)
     relevance_floor: float = Field(ge=0, le=1)
-    mode: Literal["prefix", "final"]
+    mode: Literal["prefix", "fair"]
     baseline: Literal["retain", "permit_with_notice"]
     protected_attribute: str = Field(min_length=1)
     unknown_institution: str = Field(min_length=1)
@@ -81,7 +81,7 @@ class _Rerank(_Schema):
     max_per_institution: int | None = Field(gt=0)
     min_protected_share: float = Field(ge=0, le=1)
     relevance_floor: float = Field(ge=0, le=1)
-    fairness_mode: Literal["none", "prefix", "final"]
+    fairness_mode: Literal["none", "prefix", "fair"]
 
 
 class _Parameters(_Schema):

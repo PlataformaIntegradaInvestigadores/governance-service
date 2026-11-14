@@ -1,4 +1,5 @@
 import json
+from copy import deepcopy
 from dataclasses import replace
 from pathlib import Path
 
@@ -27,6 +28,16 @@ def test_recommender_reference(case):
     )
     assert assessment.verdict == case["expected"]["verdict"]
     assert assessment.reasons == tuple(case["expected"]["reason_codes"])
+
+
+def test_fair_mode_is_retained_as_weakened_relative_to_prefix_policy():
+    response = deepcopy(CASES[0]["upstream_response"])
+    response["parameters"]["rerank"]["fairness_mode"] = "fair"
+
+    assessment = assess_recommender_response(200, json.dumps(response).encode(), POLICY)
+
+    assert assessment.verdict == "retain"
+    assert assessment.reasons[0] == "FAIRNESS_WEAKENED"
 
 
 def test_baseline_can_be_permitted_with_notice():

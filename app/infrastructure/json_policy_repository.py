@@ -15,7 +15,7 @@ class _PolicyDocument(BaseModel):
     allow_complete: bool = False
 
 
-def _unique_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
+def unique_policy_fields(pairs: list[tuple[str, object]]) -> dict[str, object]:
     result: dict[str, object] = {}
     for key, value in pairs:
         if key in result:
@@ -31,7 +31,7 @@ class JsonPolicyRepository:
     def load(self) -> QaPolicy:
         text = self._path.read_text(encoding="utf-8")
         try:
-            payload = json.loads(text, object_pairs_hook=_unique_object)
+            payload = json.loads(text, object_pairs_hook=unique_policy_fields)
             document = _PolicyDocument.model_validate(payload)
             return QaPolicy(**document.model_dump())
         except (ValidationError, ValueError) as error:

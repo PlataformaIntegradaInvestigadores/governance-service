@@ -108,6 +108,12 @@ Los contratos completos:
 - [Recomendaciones gobernadas](docs/contracts/ethical-recommender-recommend.v1.md)
 - [Muestreo retrospectivo](docs/contracts/qa-samples-v1.md)
 
+El monitor de equidad dispone de una política JSON versionada de borrador en
+`policies/recommender-monitor.draft-1.json`. El cargador valida sus parámetros
+y admite referencias al pool y a la población. La referencia y los umbrales del
+borrador están pendientes de ratificación. La ruta de recomendaciones todavía
+no carga esta política ni aplica las transiciones del monitor.
+
 ## Flujo de gobernanza
 
 1. El solicitante llama a una ruta gobernada. El servicio reenvía la petición

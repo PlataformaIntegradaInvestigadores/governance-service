@@ -1,0 +1,11 @@
+{
+  "version": "reco-monitor-draft-1",
+  "window": 100,
+  "min_selected_per_group": 30,
+  "di_min": 0.8,
+  "spd_range": [-0.1, 0.1],
+  "reference": "pool",
+  "population_share": 0.1278047500328041,
+  "escalate_after": 3,
+  "return_after": 3
+}

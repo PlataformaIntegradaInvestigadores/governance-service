@@ -76,6 +76,7 @@ contienen credenciales.
 | `RECOMMENDER_UPSTREAM_BASE_URL` | Origen de `ethical-recommender-service` | sin valor |
 | `RECOMMENDER_HMAC_KEY` | Clave HMAC externa, ≥ 32 caracteres | sin valor |
 | `RECOMMENDER_POLICY_PATH` | Política de equidad | `policies/recommender-fairness.draft-1.json` |
+| `RECOMMENDER_MONITOR_POLICY_PATH` | Política del monitor por ventanas | sin valor |
 | `RECOMMENDER_TIMEOUT_SECONDS` | Tiempo máximo hacia el recomendador (máx. 120) | `30` |
 
 Guarda las bases locales en el directorio ignorado `local/` y usa solo datos
@@ -108,11 +109,11 @@ Los contratos completos:
 - [Recomendaciones gobernadas](docs/contracts/ethical-recommender-recommend.v1.md)
 - [Muestreo retrospectivo](docs/contracts/qa-samples-v1.md)
 
-El monitor de equidad dispone de una política JSON versionada de borrador en
-`policies/recommender-monitor.draft-1.json`. El cargador valida sus parámetros
-y admite referencias al pool y a la población. La referencia y los umbrales del
-borrador están pendientes de ratificación. La ruta de recomendaciones todavía
-no carga esta política ni aplica las transiciones del monitor.
+Para activar el monitor en el prototipo local, configure
+`GOVERNANCE_RECOMMENDER_MONITOR_POLICY_PATH` con la ruta de una política
+versionada. El archivo `policies/recommender-monitor.draft-1.json` contiene
+valores provisionales para la referencia y los umbrales. El monitor conserva
+conteos, métricas y transiciones en SQLite y usa la revisión asíncrona existente.
 
 ## Flujo de gobernanza
 

@@ -33,5 +33,26 @@ the original list. Approved retained responses also omit names.
 
 The draft policy defaults to retaining requests whose applied configuration
 disables fairness. An alternate baseline configuration permits the exact
-disabled signature and returns an informational notice. The integration
-makes no decision about fairness over windows.
+disabled signature and returns an informational notice.
+
+## Window monitoring
+
+Set `GOVERNANCE_RECOMMENDER_MONITOR_POLICY_PATH` to enable window monitoring
+in the local prototype. Invalid or unavailable monitoring configuration or
+storage denies an otherwise eligible response. Only consistent upstream 200
+responses with fairness enabled at the configured strength enter a window.
+The monitor observes upstream selections before any supervisor edits.
+
+The request that triggers escalation requires review. The request that
+completes recovery still requires review, and subsequent requests use their
+per-response verdict. The monitor can retain an otherwise permitted response
+with `FAIRNESS_MONITOR_REVIEW`. Existing per-response retention and denial
+decisions take precedence.
+
+The SQLite transaction serializes observations in commit order and saves the
+decision and observation together. The recommendation audit references the
+observation sequence. Observations contain aggregate counts, window results and
+control state. Policy snapshots are immutable. Changing
+either policy version starts a fresh window and clears the streaks while
+preserving the current control level. The draft reference and thresholds are
+subject to approval.

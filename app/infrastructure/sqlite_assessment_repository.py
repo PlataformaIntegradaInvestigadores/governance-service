@@ -1,12 +1,14 @@
 import hashlib
 import json
 import sqlite3
+from collections.abc import Callable
 from contextlib import closing
 from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID
 
+from app.domain.fairness_monitor import MonitorPolicy, SelectionCounts
 from app.domain.qa import (
     Assessment,
     PolicyVersionConflictError,
@@ -31,6 +33,10 @@ from app.domain.review import (
     require_review_case_link,
 )
 from app.domain.supervision import Supervisor
+from app.infrastructure.sqlite_fairness_monitor import (
+    MONITOR_SCHEMA,
+    observe_recommendation,
+)
 
 _ASSESSMENTS = """
 CREATE TABLE IF NOT EXISTS assessments (
@@ -65,6 +71,7 @@ CREATE TABLE IF NOT EXISTS policies (
     PRIMARY KEY (policy_id, version)
 );
 {_ASSESSMENTS}
+{MONITOR_SCHEMA}
 CREATE TABLE IF NOT EXISTS recommender_audit (
     assessment_id TEXT PRIMARY KEY NOT NULL REFERENCES assessments(assessment_id),
     metadata_json TEXT NOT NULL
@@ -237,6 +244,62 @@ class SqliteAssessmentRepository:
         review_case: ReviewCase | None,
         recommendation_audit: dict[str, object] | None = None,
     ) -> None:
+        with closing(sqlite3.connect(self._path)) as connection, connection:
+            connection.execute("PRAGMA foreign_keys = ON")
+            self._save(connection, record, review_case, recommendation_audit)
+
+    def save_monitored_recommendation(
+        self,
+        monitor: tuple[str, MonitorPolicy],
+        recommender_version: str,
+        counts: SelectionCounts,
+        build: Callable[[bool], tuple[RecordedAssessment, ReviewCase | None]],
+        audit: dict[str, object],
+    ) -> tuple[RecordedAssessment, ReviewCase | None]:
+        version, policy = monitor
+        with closing(sqlite3.connect(self._path)) as connection, connection:
+            connection.execute("PRAGMA foreign_keys = ON")
+            connection.execute("BEGIN IMMEDIATE")
+            self._store_policy(
+                connection, "recommender-monitor", version, asdict(policy)
+            )
+            require_review, sequence = observe_recommendation(
+                connection, version, policy, recommender_version, counts
+            )
+            record, case = build(require_review)
+            self._save(connection, record, case, audit | {"monitor_sequence": sequence})
+        return record, case
+
+    @staticmethod
+    def _store_policy(
+        connection: sqlite3.Connection,
+        policy_id: str,
+        version: str,
+        policy_fields: dict[str, object],
+    ) -> None:
+        snapshot = json.dumps(policy_fields, sort_keys=True, separators=(",", ":"))
+        digest = _sha256(snapshot)
+        connection.execute(
+            "INSERT OR IGNORE INTO policies VALUES (?, ?, ?, ?)",
+            (policy_id, version, snapshot, digest),
+        )
+        stored = connection.execute(
+            "SELECT snapshot_json, sha256 FROM policies "
+            "WHERE policy_id = ? AND version = ?",
+            (policy_id, version),
+        ).fetchone()
+        if stored != (snapshot, digest):
+            raise PolicyVersionConflictError(
+                "Policy content changed without a new version"
+            )
+
+    @staticmethod
+    def _save(
+        connection: sqlite3.Connection,
+        record: RecordedAssessment,
+        review_case: ReviewCase | None,
+        recommendation_audit: dict[str, object] | None,
+    ) -> None:
         require_review_case_link(record, review_case)
         policy = record.policy
         assessment = record.assessment
@@ -249,51 +312,37 @@ class SqliteAssessmentRepository:
         if isinstance(policy, QaPolicy) and not policy.allow_complete:
             # Keep existing review-only snapshots byte-for-byte compatible.
             del policy_fields["allow_complete"]
-        snapshot = json.dumps(policy_fields, sort_keys=True, separators=(",", ":"))
-        digest = _sha256(snapshot)
-        with closing(sqlite3.connect(self._path)) as connection, connection:
-            connection.execute("PRAGMA foreign_keys = ON")
+        SqliteAssessmentRepository._store_policy(
+            connection, policy.policy_id, policy.version, policy_fields
+        )
+        connection.execute(
+            "INSERT INTO assessments VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                record.assessment_id,
+                record.created_at.isoformat(),
+                policy.policy_id,
+                policy.version,
+                assessment.verdict.value,
+                json.dumps(assessment.reason_codes),
+            ),
+        )
+        if review_case is not None:
+            content = _content_json(review_case.content)
             connection.execute(
-                "INSERT OR IGNORE INTO policies VALUES (?, ?, ?, ?)",
-                (policy.policy_id, policy.version, snapshot, digest),
-            )
-            stored = connection.execute(
-                "SELECT snapshot_json, sha256 FROM policies "
-                "WHERE policy_id = ? AND version = ?",
-                (policy.policy_id, policy.version),
-            ).fetchone()
-            if stored != (snapshot, digest):
-                raise PolicyVersionConflictError(
-                    "Policy content changed without a new version"
-                )
-            connection.execute(
-                "INSERT INTO assessments VALUES (?, ?, ?, ?, ?, ?)",
+                "INSERT INTO review_cases VALUES (?, ?, ?, ?, ?)",
                 (
-                    record.assessment_id,
-                    record.created_at.isoformat(),
-                    policy.policy_id,
-                    policy.version,
-                    assessment.verdict.value,
-                    json.dumps(assessment.reason_codes),
+                    review_case.case_id,
+                    review_case.assessment_id,
+                    review_case.created_at.isoformat(),
+                    content,
+                    _sha256(content),
                 ),
             )
-            if review_case is not None:
-                content = _content_json(review_case.content)
-                connection.execute(
-                    "INSERT INTO review_cases VALUES (?, ?, ?, ?, ?)",
-                    (
-                        review_case.case_id,
-                        review_case.assessment_id,
-                        review_case.created_at.isoformat(),
-                        content,
-                        _sha256(content),
-                    ),
-                )
-            if recommendation_audit is not None:
-                connection.execute(
-                    "INSERT INTO recommender_audit VALUES (?, ?)",
-                    (record.assessment_id, json.dumps(recommendation_audit)),
-                )
+        if recommendation_audit is not None:
+            connection.execute(
+                "INSERT INTO recommender_audit VALUES (?, ?)",
+                (record.assessment_id, json.dumps(recommendation_audit)),
+            )
 
     def get(self, assessment_id: str) -> RecordedAssessment | None:
         with closing(sqlite3.connect(self._path)) as connection:

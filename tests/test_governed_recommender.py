@@ -2,6 +2,7 @@ import copy
 import hmac
 import json
 import sqlite3
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
 from pathlib import Path
 
@@ -22,6 +23,32 @@ GEN = "/api/v1/governed/recommender/recommend"
 REVIEW = "/api/v1/review-cases"
 
 
+def monitor_policy(client, db, **overrides):
+    policy = json.loads(
+        (ROOT / "policies/recommender-monitor.draft-1.json").read_bytes()
+    )
+    policy.update(window=1, min_selected_per_group=2)
+    policy.update(overrides)
+    path = db.with_suffix(".json")
+    path.write_text(json.dumps(policy), encoding="utf-8")
+    client.app.state.settings.recommender_monitor_policy_path = path
+    return path
+
+
+def monitored_response(pool_share):
+    response = copy.deepcopy(CASES[0]["upstream_response"])
+    response["fairness_metrics"]["pool_low_visibility_share"] = pool_share
+    return response
+
+
+def monitor_rows(db):
+    with closing(sqlite3.connect(db)) as connection:
+        return connection.execute(
+            "SELECT window_json, control_json, completed_json "
+            "FROM recommender_monitor_observations ORDER BY sequence"
+        ).fetchall()
+
+
 @pytest.fixture
 def system(tmp_path):
     database = tmp_path / "test.sqlite"
@@ -36,6 +63,115 @@ def system(tmp_path):
     with respx.mock as mock, TestClient(create_app(settings)) as client:
         verifier = mock.get("http://search.test/internal/auth/validate-admin-token/")
         yield client, mock.post(URL), verifier, database, key
+
+
+def test_monitor_escalates_preserves_streak_and_recovers_through_http(system):
+    client, upstream, _, db, _ = system
+    monitor_policy(client, db)
+    upstream.respond(200, json=monitored_response(0.2))
+    assert client.post(GEN, json={}).status_code == 200
+    upstream.respond(200, json=monitored_response(0.8))
+    assert [client.post(GEN, json={}).status_code for _ in range(2)] == [200, 200]
+    upstream.respond(200, json=CASES[1]["upstream_response"])
+    assert client.post(GEN, json={}).status_code == 200
+    upstream.respond(200, json=monitored_response(0.8))
+    held = client.post(GEN, json={})
+    assert held.status_code == 202
+    assert set(held.json()) == {"review_id", "review_token"}
+    upstream.respond(200, json=monitored_response(0.2))
+    assert [client.post(GEN, json={}).status_code for _ in range(4)] == [
+        202,
+        202,
+        202,
+        200,
+    ]
+
+    completed = [json.loads(row[2]) for row in monitor_rows(db)]
+    assert completed[3]["metrics"]["status"] == "not_evaluable"
+    assert completed[3]["transition"] is None
+    assert completed[4]["transition"] == "out_of_threshold"
+    assert completed[4]["from"] == "automatic"
+    assert completed[4]["to"] == "mandatory_review"
+    assert completed[7]["transition"] == "back_within_threshold"
+    assert completed[7]["from"] == "mandatory_review"
+    assert completed[7]["to"] == "automatic"
+    with closing(sqlite3.connect(db)) as connection:
+        saved = connection.execute(
+            """
+            SELECT a.reason_codes_json, ra.metadata_json FROM assessments a
+            JOIN review_cases r USING (assessment_id)
+            JOIN recommender_audit ra USING (assessment_id) WHERE r.case_id = ?
+            """,
+            (held.json()["review_id"],),
+        ).fetchone()
+    assert json.loads(saved[0]) == ["FAIRNESS_MONITOR_REVIEW"]
+    assert json.loads(saved[1])["monitor_sequence"] == 5
+
+
+def test_monitor_excludes_ineligible_responses(system):
+    client, upstream, _, db, _ = system
+    monitor_policy(client, db)
+    scenarios = {"RR03": 202, "RR04": 202, "RR06": 404, "RR09": 403}
+    for case in CASES:
+        if case["id"] in scenarios:
+            upstream.respond(case["upstream_status"], json=case["upstream_response"])
+            assert client.post(GEN, json={}).status_code == scenarios[case["id"]]
+    assert not monitor_rows(db)
+
+
+def test_monitor_reopens_partial_window_and_serializes_parallel_requests(system):
+    client, upstream, _, db, _ = system
+    monitor_policy(client, db, window=4)
+    upstream.respond(200, json=monitored_response(0.2))
+    assert client.post(GEN, json={}).status_code == 200
+    settings = client.app.state.settings
+    with TestClient(create_app(settings)) as restarted, ThreadPoolExecutor(3) as pool:
+        responses = list(pool.map(lambda _: restarted.post(GEN, json={}), range(3)))
+    assert [response.status_code for response in responses] == [200] * 3
+    rows = monitor_rows(db)
+    assert [json.loads(row[0])["requests"] for row in rows] == [1, 2, 3, 0]
+    assert [row[2] is not None for row in rows] == [False, False, False, True]
+    assert json.loads(rows[-1][2])["counts"] == {
+        "selected_protected": 16,
+        "selected_reference": 64,
+        "candidates_protected": 80,
+        "candidates_reference": 320,
+    }
+
+
+def test_monitor_rolls_back_when_assessment_write_fails(system):
+    client, upstream, _, db, _ = system
+    monitor_policy(client, db, escalate_after=1)
+    upstream.respond(200, json=monitored_response(0.8))
+    with closing(sqlite3.connect(db)) as connection:
+        connection.executescript(
+            """CREATE TRIGGER reject_audit BEFORE INSERT ON recommender_audit
+               BEGIN SELECT RAISE(ABORT, 'test failure'); END;"""
+        )
+    assert client.post(GEN, json={}).status_code == 403
+    assert not monitor_rows(db)
+    with closing(sqlite3.connect(db)) as connection:
+        assert connection.execute("SELECT count(*) FROM assessments").fetchone() == (0,)
+        assert connection.execute("SELECT count(*) FROM review_cases").fetchone() == (
+            0,
+        )
+        assert connection.execute("SELECT count(*) FROM policies").fetchone() == (0,)
+
+
+def test_monitor_config_cannot_change_without_new_version(system):
+    client, upstream, _, db, _ = system
+    path = monitor_policy(client, db, escalate_after=1)
+    upstream.respond(200, json=monitored_response(0.8))
+    assert client.post(GEN, json={}).status_code == 202
+    monitor_policy(client, db, window=2)
+    assert client.post(GEN, json={}).status_code == 403
+    assert len(monitor_rows(db)) == 1
+    monitor_policy(client, db, window=2, version="monitor-2")
+    assert client.post(GEN, json={}).status_code == 202
+    assert json.loads(monitor_rows(db)[1][0])["requests"] == 1
+    path.unlink()
+    assert client.post(GEN, json={}).status_code == 403
+    assert len(monitor_rows(db)) == 2
 
 
 @pytest.mark.parametrize("case", CASES, ids=[case["id"] for case in CASES])

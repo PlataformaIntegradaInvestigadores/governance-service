@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     recommender_upstream_base_url: AnyHttpUrl | None = None
     recommender_timeout_seconds: float = Field(default=30.0, gt=0, le=120)
     recommender_policy_path: Path = Path("policies/recommender-fairness.draft-1.json")
+    recommender_monitor_policy_path: Path | None = None
     recommender_hmac_key: SecretStr | None = Field(default=None, min_length=32)
 
     @field_validator(

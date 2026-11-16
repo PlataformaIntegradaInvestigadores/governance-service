@@ -10,6 +10,7 @@ from fastapi import APIRouter, Body, Depends, Request, Response
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from app.domain.fairness_monitor import SelectionCounts
 from app.domain.qa import Assessment, RecordedAssessment, Verdict
 from app.domain.recommender import RecommendationList, quota_minimum
 from app.domain.resolution import RELEASING_OUTCOMES, ReviewCaseNotFoundError
@@ -18,6 +19,7 @@ from app.domain.review import (
     RetainedRecommendation,
     ReviewCase,
 )
+from app.infrastructure.fairness_monitor_policy import load_monitor_policy
 from app.infrastructure.recommender_response import (
     evaluate_recommender_response,
     load_recommender_policy,
@@ -27,6 +29,11 @@ from app.infrastructure.recommender_response import (
 router = APIRouter(prefix="/governed/recommender", tags=["Governed recommendations"])
 _bearer = HTTPBearer(auto_error=False)
 _NO_STORE = {"Cache-Control": "no-store"}
+_MONITOR_EXCLUSIONS = {
+    "BASELINE_WITHOUT_FAIRNESS",
+    "FAIRNESS_DISABLED",
+    "FAIRNESS_WEAKENED",
+}
 
 
 def _denied(request: Request) -> JSONResponse:
@@ -114,52 +121,80 @@ def recommend(
         policy = load_recommender_policy(state.settings.recommender_policy_path)
         status, body, media_type = state.recommender_upstream.recommend(payload)
         assessment, result = evaluate_recommender_response(status, body, policy)
+        audit = _audit(
+            status,
+            body,
+            state.recommender_key,
+            payload.get("author_ids"),
+            result,
+            policy.unknown_institution,
+        )
         now = datetime.now(UTC)
         assessment_id = str(uuid4())
-        case = None
-        if assessment.verdict == "retain" and result is not None:
-            case = ReviewCase(
-                str(uuid4()),
-                assessment_id,
-                now,
-                retain_recommendation(body, result, policy, assessment.reasons),
+
+        def build(require_review: bool) -> tuple[RecordedAssessment, ReviewCase | None]:
+            verdict = {
+                "permit": Verdict.ALLOW,
+                "retain": Verdict.SUSPEND,
+                "deny": Verdict.DENY,
+                "client_error": Verdict.DENY,
+            }[assessment.verdict]
+            reasons = assessment.reasons
+            if assessment.verdict == "client_error":
+                reasons = ("UPSTREAM_CLIENT_ERROR",)
+            if require_review and verdict == Verdict.ALLOW:
+                verdict = Verdict.SUSPEND
+                reasons += ("FAIRNESS_MONITOR_REVIEW",)
+            case = None
+            if verdict == Verdict.SUSPEND and result is not None:
+                case = ReviewCase(
+                    str(uuid4()),
+                    assessment_id,
+                    now,
+                    retain_recommendation(body, result, policy, reasons),
+                )
+            return (
+                RecordedAssessment(
+                    assessment_id,
+                    now,
+                    policy,
+                    Assessment(verdict, policy.policy_id, policy.version, reasons),
+                    case.case_id if case is not None else None,
+                ),
+                case,
             )
-        verdict = {
-            "permit": Verdict.ALLOW,
-            "retain": Verdict.SUSPEND,
-            "deny": Verdict.DENY,
-            "client_error": Verdict.DENY,
-        }[assessment.verdict]
-        reasons = assessment.reasons
-        if assessment.verdict == "client_error":
-            reasons = ("UPSTREAM_CLIENT_ERROR",)
-        record = RecordedAssessment(
-            assessment_id,
-            now,
-            policy,
-            Assessment(verdict, policy.policy_id, policy.version, reasons),
-            case.case_id if case is not None else None,
-        )
-        key = state.recommender_key
-        state.recommender_assessments.save(
-            record,
-            case,
-            _audit(
-                status,
-                body,
-                key,
-                payload.get("author_ids"),
-                result,
-                policy.unknown_institution,
-            ),
-        )
+
+        monitor_path = state.settings.recommender_monitor_policy_path
+        repository = state.recommender_assessments
+        if (
+            monitor_path is not None
+            and result is not None
+            and assessment.verdict in ("permit", "retain")
+            and _MONITOR_EXCLUSIONS.isdisjoint(assessment.reasons)
+        ):
+            selected = sum(p["protected"] for p in result.profiles)
+            protected_pool = round(
+                result.pool_low_visibility_share * result.candidates_retrieved
+            )
+            counts = SelectionCounts(
+                selected,
+                len(result.profiles) - selected,
+                protected_pool,
+                result.candidates_retrieved - protected_pool,
+            )
+            record, case = repository.save_monitored_recommendation(
+                load_monitor_policy(monitor_path), policy.version, counts, build, audit
+            )
+        else:
+            record, case = build(False)
+            repository.save(record, case, audit)
     except (OSError, RecursionError, ValueError, sqlite3.Error):
         return _denied(request)
     if assessment.verdict == "client_error":
         return Response(
             body, status_code=status, media_type=media_type, headers=_NO_STORE
         )
-    if assessment.verdict == "permit":
+    if record.assessment.verdict == Verdict.ALLOW:
         headers = dict(_NO_STORE)
         if assessment.reasons:
             headers["X-Governance-Notices"] = ",".join(assessment.reasons)
@@ -167,7 +202,10 @@ def recommend(
     if case is None:
         return _denied(request)
     return JSONResponse(
-        {"review_id": case.case_id, "review_token": _ticket(key, UUID(case.case_id))},
+        {
+            "review_id": case.case_id,
+            "review_token": _ticket(state.recommender_key, UUID(case.case_id)),
+        },
         status_code=202,
         headers=_NO_STORE,
     )

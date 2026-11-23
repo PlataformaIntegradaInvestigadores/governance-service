@@ -12,6 +12,9 @@ import respx
 from fastapi.testclient import TestClient
 
 from app.core.config import Settings
+from app.domain.resolution import InvalidRecommendationResolutionError, ReviewOutcome
+from app.domain.review import RetainedQaPair
+from app.domain.supervision import Supervisor
 from app.main import create_app
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -290,10 +293,10 @@ def test_reference_through_http_and_review(system, case, caplog):
         == 422
     )
     edit["justification"] = "Synthetic policy review"
-    assert (
-        client.post(f"{case_url}/resolution", headers=admin, json=edit).status_code
-        == 201
-    )
+    decision = client.post(f"{case_url}/resolution", headers=admin, json=edit)
+    assert decision.status_code == 201
+    assert decision.json()["proposed_outcome"] == exp["decision"]
+    assert decision.json()["departed_from_plan"] is False
     assert (
         client.post(f"{case_url}/resolution", headers=admin, json=edit).status_code
         == 200
@@ -490,3 +493,204 @@ def test_additional_policy_branches(system, mutation):
             "protected_attribute": "UPSTREAM_CONTRACT_INVALID",
         }[mutation]
     ]
+
+
+@pytest.mark.parametrize(
+    ("outcome", "ranks", "case_index", "proposed"),
+    [
+        ("approve", None, 2, "reject"),
+        ("modify", [1, 3], 2, "reject"),
+        ("modify", [1, 3], 6, "modify"),
+    ],
+)
+def test_human_override_is_persisted_and_controls_release(
+    system, outcome, ranks, case_index, proposed, caplog
+):
+    client, upstream, verifier, db, _ = system
+    doc = CASES[case_index]["upstream_response"]
+    upstream.respond(200, json=doc)
+    held = client.post(GEN, json={})
+    assert held.status_code == 202
+    ticket = held.json()
+    case_url = f"{REVIEW}/{ticket['review_id']}"
+    resolution_url = f"{case_url}/resolution"
+    poll = f"/api/v1/governed/recommender/reviews/{ticket['review_id']}"
+    requester = {"Authorization": f"Bearer {ticket['review_token']}"}
+    admin = {"X-Admin-Token": "test-admin"}
+    verifier.respond(204)
+    assert (
+        client.get(case_url, headers=admin).json()["review_plan"]["outcome"] == proposed
+    )
+    body = {"outcome": outcome}
+    if ranks is not None:
+        body["retained_ranks"] = ranks
+
+    assert client.get(poll, headers=requester).status_code == 202
+    assert client.post(resolution_url, json=body).status_code == 401
+    for missing in (body, {**body, "justification": "  "}):
+        denied = client.post(resolution_url, headers=admin, json=missing)
+        assert denied.status_code == 422
+        assert denied.json()["code"] == "JUSTIFICATION_REQUIRED"
+    assert client.get(poll, headers=requester).status_code == 202
+    body["justification"] = "Synthetic override"
+    resolution = client.post(resolution_url, headers=admin, json=body)
+
+    assert resolution.status_code == 201
+    assert resolution.json()["proposed_outcome"] == proposed
+    assert resolution.json()["departed_from_plan"] is True
+    with TestClient(create_app(client.app.state.settings)) as reopened:
+        view = reopened.get(case_url, headers=admin).json()
+        assert view["resolution"]["proposed_outcome"] == proposed
+        assert view["resolution"]["departed_from_plan"] is True
+        release = reopened.get(poll, headers=requester)
+        assert release.status_code == 200
+        assert all("name" not in p for p in release.json()["recommendations"])
+        if ranks is not None:
+            assert [p["rank"] for p in release.json()["recommendations"]] == ranks
+        replay = reopened.post(resolution_url, headers=admin, json=body)
+        assert replay.status_code == 200
+        conflict = reopened.post(
+            resolution_url, headers=admin, json={**body, "justification": "Other"}
+        )
+        assert conflict.status_code == 422
+        assert conflict.json()["code"] == "INVALID_RECOMMENDATION_RESOLUTION"
+        plan_conflict = reopened.post(
+            resolution_url,
+            headers=admin,
+            json={
+                "outcome": proposed,
+                "justification": "Synthetic original proposal",
+                **(
+                    {"retained_ranks": view["review_plan"]["retained_ranks"]}
+                    if proposed == "modify"
+                    else {}
+                ),
+            },
+        )
+        assert plan_conflict.status_code == 409
+        assert plan_conflict.json()["code"] == "CASE_ALREADY_RESOLVED"
+
+    with closing(sqlite3.connect(db)) as connection:
+        (metadata,) = connection.execute(
+            "SELECT metadata_json FROM recommender_audit"
+        ).fetchone()
+    assert "Synthetic override" not in metadata + caplog.text
+    for profile in doc["recommendations"]:
+        if profile["name"]:
+            assert profile["name"] not in metadata + caplog.text
+
+
+@pytest.mark.parametrize("ranks", [None, [], [9999], [1, 1], [3, 1]])
+def test_invalid_recommendation_selection_leaves_case_pending(system, ranks):
+    client, upstream, verifier, db, _ = system
+    upstream.respond(200, json=CASES[2]["upstream_response"])
+    held = client.post(GEN, json={}).json()
+    verifier.respond(204)
+    result = client.post(
+        f"{REVIEW}/{held['review_id']}/resolution",
+        headers={"X-Admin-Token": "test-admin"},
+        json={
+            "outcome": "modify",
+            "retained_ranks": ranks,
+            "justification": "Synthetic",
+        },
+    )
+    assert result.status_code == 422
+    assert result.json()["code"] == (
+        "INVALID_REQUEST" if not ranks else "INVALID_RECOMMENDATION_RESOLUTION"
+    )
+    with closing(sqlite3.connect(db)) as connection:
+        assert connection.execute(
+            "SELECT count(*) FROM review_resolutions"
+        ).fetchone() == (0,)
+
+
+def test_failed_override_write_leaves_case_pending_after_reopening(system):
+    client, upstream, verifier, db, _ = system
+    upstream.respond(200, json=CASES[2]["upstream_response"])
+    held = client.post(GEN, json={}).json()
+    verifier.respond(204)
+    with closing(sqlite3.connect(db)) as connection, connection:
+        connection.execute(
+            "CREATE TRIGGER reject_resolution BEFORE INSERT ON review_resolutions "
+            "BEGIN SELECT RAISE(ABORT, 'synthetic failure'); END"
+        )
+    with pytest.raises(sqlite3.IntegrityError, match="synthetic failure"):
+        client.post(
+            f"{REVIEW}/{held['review_id']}/resolution",
+            headers={"X-Admin-Token": "test-admin"},
+            json={"outcome": "approve", "justification": "Synthetic"},
+        )
+    with closing(sqlite3.connect(db)) as reopened:
+        assert reopened.execute(
+            "SELECT count(*) FROM review_resolutions"
+        ).fetchone() == (0,)
+    assert (
+        client.get(
+            f"/api/v1/governed/recommender/reviews/{held['review_id']}",
+            headers={"Authorization": f"Bearer {held['review_token']}"},
+        ).status_code
+        == 202
+    )
+
+
+@pytest.mark.parametrize(
+    ("outcome", "pairs", "ranks"),
+    [
+        (ReviewOutcome.APPROVE, None, (1,)),
+        (ReviewOutcome.MODIFY, None, None),
+        (ReviewOutcome.MODIFY, None, ()),
+        (ReviewOutcome.MODIFY, (RetainedQaPair("Question", "Answer"),), None),
+    ],
+)
+def test_application_rejects_inconsistent_recommendation_edits(
+    system, outcome, pairs, ranks
+):
+    client, upstream, _, _, _ = system
+    upstream.respond(200, json=CASES[2]["upstream_response"])
+    held = client.post(GEN, json={}).json()
+    with pytest.raises(InvalidRecommendationResolutionError):
+        client.app.state.review_cases.resolve(
+            held["review_id"],
+            Supervisor("admin", "Admin"),
+            outcome,
+            justification="Synthetic",
+            modified_pairs=pairs,
+            retained_ranks=ranks,
+        )
+
+
+def test_legacy_resolution_stays_readable_after_schema_upgrade(system):
+    client, upstream, verifier, db, _ = system
+    upstream.respond(200, json=CASES[2]["upstream_response"])
+    held = client.post(GEN, json={}).json()
+    case_url = f"{REVIEW}/{held['review_id']}"
+    with closing(sqlite3.connect(db)) as connection, connection:
+        connection.execute(
+            "ALTER TABLE review_resolutions DROP COLUMN departed_from_plan"
+        )
+        connection.execute(
+            "ALTER TABLE review_resolutions DROP COLUMN proposed_outcome"
+        )
+        connection.execute(
+            "INSERT INTO review_resolutions VALUES "
+            "(?, ?, 'reject', ?, ?, ?, ?, ?, NULL, NULL)",
+            (
+                "legacy",
+                held["review_id"],
+                "2026-11-01T10:00:00+00:00",
+                "2026-11-02T10:00:00+00:00",
+                "admin",
+                json.dumps({"display_name": "Admin"}),
+                "Synthetic legacy rejection",
+            ),
+        )
+    verifier.respond(204)
+    with TestClient(create_app(client.app.state.settings)) as reopened:
+        view = reopened.get(case_url, headers={"X-Admin-Token": "test-admin"})
+        assert view.status_code == 200
+        resolution = view.json()["resolution"]
+        assert resolution["resolution_id"] == "legacy"
+        assert resolution["outcome"] == "reject"
+        assert "proposed_outcome" not in resolution
+        assert "departed_from_plan" not in resolution

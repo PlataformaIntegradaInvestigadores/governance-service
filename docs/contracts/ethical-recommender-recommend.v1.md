@@ -26,8 +26,11 @@ request object without translating its options. It evaluates
 Use the existing `/api/v1/review-cases/{case_id}` and
 `/api/v1/review-cases/{case_id}/resolution` endpoints with
 `X-Admin-Token`. The protected response is under `recommendation` and excludes
-names. Send `outcome`, `justification` and, on modify, `retained_ranks` in
-original order. The release preserves original ranks and reports Jaccard
+names. The case includes a suggested `review_plan`. Send `outcome`,
+`justification` and, on modify, a nonempty subset of retained list ranks in
+original order. An administrator can choose a different outcome or subset
+with a nonblank justification. The resolution records `proposed_outcome`
+and `departed_from_plan`. The release preserves original ranks and reports Jaccard
 divergence under `governance`. The remaining upstream fairness metrics describe
 the original list. Approved retained responses also omit names.
 

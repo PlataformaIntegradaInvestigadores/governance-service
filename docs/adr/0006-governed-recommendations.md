@@ -3,7 +3,7 @@
 ## Status
 
 Accepted for the local implementation of AB#230. The versioned policy is a draft
-pending academic review.
+pending academic review. ADR 0007 amends the recommendation review rule.
 
 ## Context
 

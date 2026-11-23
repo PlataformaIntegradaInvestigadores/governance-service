@@ -1,3 +1,4 @@
+import json
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -98,9 +99,22 @@ class ReviewCases:
         if outcome is ReviewOutcome.EXPIRED:
             raise ValueError("Expiry is recorded by the service, not a supervisor")
         case = self._case(case_id)
-        content = self._modified_content(
-            case, outcome, justification, modified_pairs, retained_ranks
-        )
+        proposed_outcome = None
+        departed_from_plan = None
+        if isinstance(case.content, RetainedRecommendation):
+            original = case.content
+            proposed_outcome = ReviewOutcome(original.permitted_outcome)
+            proposed_ranks = (
+                original.allowed_ranks
+                if proposed_outcome is ReviewOutcome.MODIFY
+                else None
+            )
+            departed_from_plan = (
+                outcome is not proposed_outcome or retained_ranks != proposed_ranks
+            )
+            if not (justification or "").strip():
+                raise JustificationRequiredError("This outcome needs a justification")
+        content = self._modified_content(case, outcome, modified_pairs, retained_ranks)
         requested = ReviewResolution(
             str(uuid4()),
             case_id,
@@ -110,6 +124,8 @@ class ReviewCases:
             supervisor,
             (justification.strip() or None) if justification else None,
             content,
+            proposed_outcome,
+            departed_from_plan,
         )
         existing = self._resolutions.get(case_id)
         if existing is not None:
@@ -130,31 +146,22 @@ class ReviewCases:
         self,
         case: ReviewCase,
         outcome: ReviewOutcome,
-        justification: str | None,
         pairs: tuple[RetainedQaPair, ...] | None,
         ranks: tuple[int, ...] | None,
     ) -> RetainedQaContent | RecommendationSelection | None:
         if isinstance(case.content, RetainedRecommendation):
-            original = case.content
-            expected = (
-                original.allowed_ranks if outcome is ReviewOutcome.MODIFY else None
-            )
-            if (
-                pairs is not None
-                or outcome.value != original.permitted_outcome
-                or ranks != expected
+            if pairs is not None or (
+                (outcome is ReviewOutcome.MODIFY) != (ranks is not None)
             ):
                 raise InvalidRecommendationResolutionError
-            if (
-                outcome is not ReviewOutcome.REJECT
-                or original.require_rejection_justification
-            ) and not (justification or "").strip():
-                raise JustificationRequiredError("This outcome needs a justification")
-            return (
-                RecommendationSelection(original.allowed_ranks)
-                if outcome is ReviewOutcome.MODIFY
-                else None
-            )
+            if ranks is None:
+                return None
+            profiles = json.loads(case.content.response_json)["recommendations"]
+            selected = set(ranks)
+            ordered = tuple(p["rank"] for p in profiles if p["rank"] in selected)
+            if not ranks or ranks != ordered:
+                raise InvalidRecommendationResolutionError
+            return RecommendationSelection(ranks)
         if ranks is not None:
             raise InvalidRecommendationResolutionError
         if pairs is None:
@@ -193,6 +200,8 @@ class ReviewCases:
         if existing.outcome is ReviewOutcome.EXPIRED:
             raise ReviewCaseExpiredError("Review window closed")
         if not existing.matches(requested):
+            if requested.departed_from_plan:
+                raise InvalidRecommendationResolutionError
             raise ReviewCaseAlreadyResolvedError("Case already resolved")
         return ResolutionResult(existing, created=False)
 

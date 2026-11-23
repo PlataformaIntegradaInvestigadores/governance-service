@@ -169,6 +169,18 @@ def _initialize(path: Path) -> None:
         ).fetchone()
         if "'allow'" not in schema:
             _migrate_assessment_verdicts(connection)
+        table_info = connection.execute("PRAGMA table_info(review_resolutions)")
+        columns = {row[1] for row in table_info}
+        if "proposed_outcome" not in columns:
+            connection.execute(
+                "ALTER TABLE review_resolutions ADD COLUMN proposed_outcome TEXT "
+                "CHECK (proposed_outcome IN ('approve', 'modify', 'reject'))"
+            )
+            connection.execute(
+                "ALTER TABLE review_resolutions ADD COLUMN departed_from_plan INTEGER "
+                "CHECK ((departed_from_plan IS NULL) = (proposed_outcome IS NULL) "
+                "AND (departed_from_plan IS NULL OR departed_from_plan IN (0, 1)))"
+            )
 
 
 def _migrate_assessment_verdicts(connection: sqlite3.Connection) -> None:
@@ -597,8 +609,11 @@ class SqliteReviewResolutionRepository:
             with closing(sqlite3.connect(self._path)) as connection, connection:
                 connection.execute("PRAGMA foreign_keys = ON")
                 connection.execute(
-                    "INSERT INTO review_resolutions VALUES "
-                    "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    "INSERT INTO review_resolutions (resolution_id, case_id, outcome, "
+                    "resolved_at, expires_at, supervisor_identity_id, "
+                    "supervisor_snapshot_json, justification, modified_content_json, "
+                    "modified_content_sha256, proposed_outcome, departed_from_plan) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (
                         resolution.resolution_id,
                         resolution.case_id,
@@ -614,6 +629,8 @@ class SqliteReviewResolutionRepository:
                         resolution.justification,
                         content,
                         _sha256(content) if content is not None else None,
+                        resolution.proposed_outcome,
+                        resolution.departed_from_plan,
                     ),
                 )
         except sqlite3.IntegrityError as error:
@@ -641,6 +658,8 @@ class SqliteReviewResolutionRepository:
             supervisor = Supervisor(
                 row["supervisor_identity_id"], snapshot["display_name"]
             )
+        proposed = row["proposed_outcome"]
+        departed = row["departed_from_plan"]
         return ReviewResolution(
             row["resolution_id"],
             row["case_id"],
@@ -650,6 +669,8 @@ class SqliteReviewResolutionRepository:
             supervisor,
             row["justification"],
             modified,
+            ReviewOutcome(proposed) if proposed is not None else None,
+            bool(departed) if departed is not None else None,
         )
 
     def pending_case_ids(self, created_before: datetime) -> tuple[str, ...]:

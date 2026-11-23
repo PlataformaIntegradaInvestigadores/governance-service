@@ -466,7 +466,10 @@ def test_database_rejects_an_expiry_with_a_supervisor(assess, database):
         pytest.raises(sqlite3.IntegrityError, match="CHECK"),
     ):
         connection.execute(
-            "INSERT INTO review_resolutions VALUES "
+            "INSERT INTO review_resolutions (resolution_id, case_id, outcome, "
+            "resolved_at, expires_at, supervisor_identity_id, "
+            "supervisor_snapshot_json, justification, modified_content_json, "
+            "modified_content_sha256) VALUES "
             "('r1', ?, 'expired', 't', 't', 'U1', '{}', NULL, NULL, NULL)",
             (record.review_case_id,),
         )
@@ -686,7 +689,6 @@ def test_resolution_after_the_window_is_denied(api, assess, clock):
         {"outcome": "modify", "justification": "Fixed"},
         {"outcome": "reject", "qa_pairs": [{"question": "Q", "answer": "A"}]},
         {"outcome": "modify", "justification": "Fixed", "qa_pairs": []},
-        {"outcome": "reject", "justification": " "},
         {"outcome": "reject", "extra": True},
         {"outcome": "modify", "justification": "x", "qa_pairs": [{"question": "Q"}]},
     ],

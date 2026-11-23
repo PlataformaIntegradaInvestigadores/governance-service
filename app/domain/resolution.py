@@ -66,6 +66,8 @@ class ReviewResolution:
     supervisor: Supervisor | None
     justification: str | None = field(default=None, repr=False)
     modified_content: RetainedQaContent | RecommendationSelection | None = None
+    proposed_outcome: ReviewOutcome | None = None
+    departed_from_plan: bool | None = None
 
     def __post_init__(self) -> None:
         if self.resolved_at.utcoffset() is None or self.expires_at.utcoffset() is None:

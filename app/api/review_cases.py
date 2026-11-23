@@ -39,7 +39,6 @@ class ResolutionRequest(BaseModel):
             str,
             StringConstraints(
                 strip_whitespace=True,
-                min_length=1,
                 max_length=MAX_JUSTIFICATION_LENGTH,
             ),
         ]
@@ -84,6 +83,14 @@ def _resolution(resolution: ReviewResolution) -> dict:
             else None
         ),
         "justification": resolution.justification,
+        **(
+            {
+                "proposed_outcome": resolution.proposed_outcome.value,
+                "departed_from_plan": resolution.departed_from_plan,
+            }
+            if resolution.proposed_outcome is not None
+            else {}
+        ),
     }
 
 
@@ -97,7 +104,13 @@ def view_case(case_id: str, reviews: _Reviews, response: Response) -> dict:
         status = "expired" if view.expired else "pending"
     content = view.case.content
     body = (
-        {"recommendation": json.loads(content.response_json)}
+        {
+            "recommendation": json.loads(content.response_json),
+            "review_plan": {
+                "outcome": content.permitted_outcome,
+                "retained_ranks": list(content.allowed_ranks),
+            },
+        }
         if not isinstance(content, RetainedQaContent)
         else {
             "qa_pairs": [

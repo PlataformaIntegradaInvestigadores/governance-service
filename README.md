@@ -155,9 +155,9 @@ The administrator can view and resolve a case. Both routes validate
 
 Rules:
 
-- A justification is required to modify, and to approve output flagged
-  `PARTIAL_GENERATION` or `SOURCE_EVIDENCE_INCOMPLETE`: both override the
-  evaluator. Rejecting needs none.
+- A nonblank justification is required to reject, to modify, and to approve
+  output flagged `PARTIAL_GENERATION` or `SOURCE_EVIDENCE_INCOMPLETE`.
+  A missing required justification returns 422 `JUSTIFICATION_REQUIRED`.
 - A case has one final resolution. Another outcome, or another supervisor,
   gets 409 `CASE_ALREADY_RESOLVED`.
 - A case expires `GOVERNANCE_REVIEW_WINDOW_MINUTES` after it was opened

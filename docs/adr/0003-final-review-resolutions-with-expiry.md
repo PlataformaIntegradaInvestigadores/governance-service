@@ -23,7 +23,7 @@ delivers output to the requester yet.
   `expired` to having no supervisor and `modify` to modified content.
 - "Contradicts the verdict" is read as overriding the evaluator: approving
   output that carries a defect code, or modifying any output, needs a
-  justification. Rejecting agrees with the cautious default and needs none.
+  justification. The original rule for rejection was amended below.
 - Modified pairs are stored with the case's original source IDs and a SHA-256
   digest. The supervisor is stored as `identity_id` plus a display-name
   snapshot.
@@ -67,3 +67,12 @@ delivers output to the requester yet.
   applied `expires_at` is stored with each resolution.
 - Case views are not audited and there is no case list (part of AB#242).
 - Justifications and modified content are stored in clear, like the cases.
+
+## Amendment D6 (2026-11-23, AB#243)
+
+Every new human rejection requires a brief, nonblank justification. The
+existing rules for modification and approval of flagged output still apply.
+An absent or blank required justification returns 422
+`JUSTIFICATION_REQUIRED`. This records the reason behind a rejection while
+preserving the original rules for routine approval and automatic expiry.
+Historical decisions remain readable and retain their original justification.

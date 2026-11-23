@@ -43,7 +43,7 @@ def _identity_of(supervisor: Supervisor | None) -> str | None:
 def justification_required(
     outcome: ReviewOutcome, reason_codes: tuple[str, ...]
 ) -> bool:
-    if outcome is ReviewOutcome.MODIFY:
+    if outcome in {ReviewOutcome.MODIFY, ReviewOutcome.REJECT}:
         return True
     return outcome is ReviewOutcome.APPROVE and bool(
         RISK_REASON_CODES.intersection(reason_codes)

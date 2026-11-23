@@ -38,7 +38,6 @@ class ResolutionRequest(BaseModel):
             str,
             StringConstraints(
                 strip_whitespace=True,
-                min_length=1,
                 max_length=MAX_JUSTIFICATION_LENGTH,
             ),
         ]

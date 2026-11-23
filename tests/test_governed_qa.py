@@ -317,12 +317,15 @@ def test_review_is_private_and_only_authorized_resolution_releases(
         respx_mock.get(
             "http://search.test/internal/auth/validate-admin-token/"
         ).respond(204)
+        admin = {"X-Admin-Token": "synthetic-admin-token"}
+        if outcome is ReviewOutcome.REJECT:
+            invalid = restarted.post(resolution_path, json=resolution, headers=admin)
+            assert invalid.status_code == 422
+            assert invalid.json()["code"] == "JUSTIFICATION_REQUIRED"
+            assert restarted.get(path, headers=headers).status_code == 202
+            resolution["justification"] = "Synthetic rejection"
         assert (
-            restarted.post(
-                resolution_path,
-                json=resolution,
-                headers={"X-Admin-Token": "synthetic-admin-token"},
-            ).status_code
+            restarted.post(resolution_path, json=resolution, headers=admin).status_code
             == 201
         )
 

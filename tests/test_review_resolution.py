@@ -109,7 +109,7 @@ def count_resolutions(database):
         (ReviewOutcome.APPROVE, ("HUMAN_REVIEW_REQUIRED", "PARTIAL_GENERATION"), True),
         (ReviewOutcome.APPROVE, ("SOURCE_EVIDENCE_INCOMPLETE",), True),
         (ReviewOutcome.MODIFY, ("HUMAN_REVIEW_REQUIRED",), True),
-        (ReviewOutcome.REJECT, ("PARTIAL_GENERATION",), False),
+        (ReviewOutcome.REJECT, ("PARTIAL_GENERATION",), True),
     ],
 )
 def test_justification_is_required_when_overriding_the_evaluator(
@@ -229,18 +229,33 @@ def test_supervisors_cannot_record_an_expiry(assess, reviews):
         reviews.resolve(record.review_case_id, ANA, ReviewOutcome.EXPIRED)
 
 
-def test_rejection_needs_no_justification(assess, reviews):
-    record = assess(payload(pairs=1))
-    result = reviews.resolve(record.review_case_id, ANA, ReviewOutcome.REJECT)
-    assert result.resolution.outcome is ReviewOutcome.REJECT
+@pytest.mark.parametrize("justification", [None, "", "  "])
+def test_rejection_without_text_leaves_review_pending(
+    api, assess, database, justification
+):
+    client, _ = api
+    case_id = assess(payload(pairs=1)).review_case_id
+    url = f"/api/v1/review-cases/{case_id}/resolution"
+    body = {"outcome": "reject"}
+    if justification is not None:
+        body["justification"] = justification
+
+    response = client.post(url, json=body, headers=AUTH)
+
+    assert_error(response, 422, "JUSTIFICATION_REQUIRED")
+    assert count_resolutions(database) == 0
 
 
 def test_repeated_request_returns_the_original_resolution(assess, reviews, database):
     record = assess(payload())
-    first = reviews.resolve(record.review_case_id, ANA, ReviewOutcome.REJECT)
+    first = reviews.resolve(
+        record.review_case_id, ANA, ReviewOutcome.REJECT, "Reviewed"
+    )
 
     renamed = replace(ANA, display_name="Ana M. Reviewer")
-    again = reviews.resolve(record.review_case_id, renamed, ReviewOutcome.REJECT)
+    again = reviews.resolve(
+        record.review_case_id, renamed, ReviewOutcome.REJECT, "Reviewed"
+    )
 
     assert not again.created
     assert again.resolution == first.resolution
@@ -253,7 +268,7 @@ def test_repeated_request_returns_the_original_resolution(assess, reviews, datab
 )
 def test_resolutions_are_final(assess, reviews, database, supervisor, outcome):
     record = assess(payload())
-    reviews.resolve(record.review_case_id, ANA, ReviewOutcome.REJECT)
+    reviews.resolve(record.review_case_id, ANA, ReviewOutcome.REJECT, "Reviewed")
     with pytest.raises(ReviewCaseAlreadyResolvedError):
         reviews.resolve(record.review_case_id, supervisor, outcome)
     assert count_resolutions(database) == 1
@@ -394,11 +409,11 @@ def racing_reviews(database, clock, competing):
 def test_concurrent_identical_resolution_is_a_replay(assess, database, clock):
     record = assess(payload())
     competing = ReviewResolution(
-        "other", "x", ReviewOutcome.REJECT, clock(), clock(), ANA
+        "other", "x", ReviewOutcome.REJECT, clock(), clock(), ANA, "Reviewed"
     )
 
     result = racing_reviews(database, clock, competing).resolve(
-        record.review_case_id, ANA, ReviewOutcome.REJECT
+        record.review_case_id, ANA, ReviewOutcome.REJECT, "Reviewed"
     )
 
     assert not result.created
@@ -411,7 +426,7 @@ def test_concurrent_conflict_without_a_readable_winner_is_rejected(
     record = assess(payload())
     with pytest.raises(ReviewCaseAlreadyResolvedError, match="concurrently"):
         racing_reviews(database, clock, None).resolve(
-            record.review_case_id, ANA, ReviewOutcome.REJECT
+            record.review_case_id, ANA, ReviewOutcome.REJECT, "Reviewed"
         )
 
 
@@ -451,7 +466,7 @@ def test_case_without_assessment_is_not_found(assess, database, clock):
 )
 def test_resolutions_are_append_only(assess, reviews, database, statement):
     record = assess(payload())
-    reviews.resolve(record.review_case_id, ANA, ReviewOutcome.REJECT)
+    reviews.resolve(record.review_case_id, ANA, ReviewOutcome.REJECT, "Reviewed")
     with (
         sqlite3.connect(database) as connection,
         pytest.raises(sqlite3.IntegrityError, match="append-only"),
@@ -548,10 +563,13 @@ def test_failed_admin_validation_denies_read_and_write(
     assert count_resolutions(database) == 0
 
 
-def test_admin_can_read_historical_attribution_after_reopening(api, assess, reviews):
+def test_admin_can_read_historical_attribution_after_reopening(api, assess, database):
     client, _ = api
     case_id = assess(payload()).review_case_id
-    historical = reviews.resolve(case_id, ANA, ReviewOutcome.REJECT).resolution
+    historical = ReviewResolution(
+        "historical", case_id, ReviewOutcome.REJECT, NOW, NOW, ANA
+    )
+    SqliteReviewResolutionRepository(database).save(historical)
     settings = client.app.state.settings
     reopened = TestClient(create_app(settings))
     url = f"/api/v1/review-cases/{case_id}"
@@ -614,8 +632,9 @@ def test_resolution_route_creates_then_replays(api, assess, caplog):
     url = f"/api/v1/review-cases/{case_id}/resolution"
 
     with caplog.at_level(logging.DEBUG):
-        created = client.post(url, json={"outcome": "reject"}, headers=AUTH)
-        replayed = client.post(url, json={"outcome": "reject"}, headers=AUTH)
+        body = {"outcome": "reject", "justification": " Reviewed "}
+        created = client.post(url, json=body, headers=AUTH)
+        replayed = client.post(url, json=body, headers=AUTH)
 
     assert created.status_code == 201
     assert created.headers["Cache-Control"] == "no-store"
@@ -625,6 +644,7 @@ def test_resolution_route_creates_then_replays(api, assess, caplog):
     }
     assert replayed.status_code == 200
     assert replayed.json() == created.json()
+    assert created.json()["justification"] == "Reviewed"
     assert TOKEN not in caplog.text
     assert RETAINED_ANSWER not in caplog.text
     view = client.get(f"/api/v1/review-cases/{case_id}", headers=AUTH).json()
@@ -686,7 +706,6 @@ def test_resolution_after_the_window_is_denied(api, assess, clock):
         {"outcome": "modify", "justification": "Fixed"},
         {"outcome": "reject", "qa_pairs": [{"question": "Q", "answer": "A"}]},
         {"outcome": "modify", "justification": "Fixed", "qa_pairs": []},
-        {"outcome": "reject", "justification": " "},
         {"outcome": "reject", "extra": True},
         {"outcome": "modify", "justification": "x", "qa_pairs": [{"question": "Q"}]},
     ],

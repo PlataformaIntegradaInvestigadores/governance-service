@@ -75,7 +75,7 @@ contienen credenciales.
 | `QA_RETAIN_SYNTHETIC_DELIVERIES` | Solo local: conserva cuerpos sintéticos para el muestreo | `false` |
 | `RECOMMENDER_UPSTREAM_BASE_URL` | Origen de `ethical-recommender-service` | sin valor |
 | `RECOMMENDER_HMAC_KEY` | Clave HMAC externa, ≥ 32 caracteres | sin valor |
-| `RECOMMENDER_POLICY_PATH` | Política de equidad | `policies/recommender-fairness.draft-1.json` |
+| `RECOMMENDER_POLICY_PATH` | Política de equidad | `policies/recommender-fairness.draft-3.json` |
 | `RECOMMENDER_MONITOR_POLICY_PATH` | Política del monitor por ventanas | sin valor |
 | `RECOMMENDER_TIMEOUT_SECONDS` | Tiempo máximo hacia el recomendador (máx. 120) | `30` |
 

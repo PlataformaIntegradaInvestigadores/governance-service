@@ -31,9 +31,11 @@ original order. The release preserves original ranks and reports Jaccard
 divergence under `governance`. The remaining upstream fairness metrics describe
 the original list. Approved retained responses also omit names.
 
-The draft policy defaults to retaining requests whose applied configuration
-disables fairness. An alternate baseline configuration permits the exact
-disabled signature and returns an informational notice.
+The default policy, `reco-draft-3`, permits the exact baseline: applied mode
+`none`, no institutional cap and `lambda = 1.0`. It returns
+`X-Governance-Notices: BASELINE_WITHOUT_FAIRNESS` and excludes the response from
+window monitoring. Other disabled configurations and policies applied below the
+required strength still require review. The thresholds match `reco-draft-2`.
 
 ## Window monitoring
 

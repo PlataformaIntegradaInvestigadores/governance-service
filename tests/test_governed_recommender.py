@@ -108,6 +108,47 @@ def test_monitor_escalates_preserves_streak_and_recovers_through_http(system):
     assert json.loads(saved[1])["monitor_sequence"] == 5
 
 
+@pytest.mark.parametrize(
+    ("variant", "status", "reason"),
+    [
+        ("baseline", 200, "BASELINE_WITHOUT_FAIRNESS"),
+        ("disabled", 202, "FAIRNESS_DISABLED"),
+        ("weakened", 202, "FAIRNESS_WEAKENED"),
+    ],
+)
+def test_active_policy_only_permits_exact_baseline(system, variant, status, reason):
+    client, upstream, _, db, _ = system
+    monitor_policy(client, db)
+    client.app.state.settings.recommender_policy_path = (
+        ROOT / Settings().recommender_policy_path
+    )
+    case = CASES[0] if variant == "weakened" else CASES[2]
+    doc = copy.deepcopy(case["upstream_response"])
+    rerank = doc["parameters"]["rerank"]
+    if variant == "disabled":
+        rerank["max_per_institution"] = 3
+    if variant == "weakened":
+        rerank["fairness_mode"] = "fair"
+    upstream.respond(200, json=doc)
+
+    response = client.post(GEN, json=case["request"])
+
+    assert response.status_code == status
+    if variant == "baseline":
+        assert response.json() == doc
+        assert reason in response.headers["X-Governance-Notices"].split(",")
+    else:
+        assert set(response.json()) == {"review_id", "review_token"}
+    assert not monitor_rows(db)
+    with closing(sqlite3.connect(db)) as connection:
+        (version,) = connection.execute("SELECT version FROM policies").fetchone()
+        (reasons,) = connection.execute(
+            "SELECT reason_codes_json FROM assessments"
+        ).fetchone()
+    assert version == "reco-draft-3"
+    assert reason in json.loads(reasons)
+
+
 def test_monitor_excludes_ineligible_responses(system):
     client, upstream, _, db, _ = system
     monitor_policy(client, db)

@@ -5,7 +5,9 @@ experimental policies, transactional local decision storage and protected review
 cases for suspended output. The API exposes
 runtime health, service metadata, OpenAPI and supervisor-only review routes.
 The optional Q&A proxy governs requests sent to its own route. Gateway and
-frontend integration, approved policies and PostgreSQL forensic audit are pending.
+frontend integration and approved policies are pending. A PostgreSQL store with
+append-only roles and a hash-chained audit log is available; see
+[PostgreSQL audit store](#postgresql-audit-store).
 
 ## Governed Q&A
 
@@ -135,7 +137,8 @@ origin for every protected request. Only 204 authorizes access.
 
 Set `GOVERNANCE_ADMIN_VERIFIER_BASE_URL` to the internal search-service origin.
 `GOVERNANCE_ADMIN_VERIFIER_TIMEOUT_SECONDS` defaults to 3 and is capped at 30.
-Review cases also require a writable SQLite file at `GOVERNANCE_DATABASE`.
+Review cases also require a store: a writable SQLite file at `GOVERNANCE_DATABASE`
+or PostgreSQL at `GOVERNANCE_DATABASE_URL`.
 See [ADR 0005](docs/adr/0005-supervision-through-admin-token.md).
 
 ## Review resolutions
@@ -187,10 +190,39 @@ anchored audit log, authorization boundary or production database. Read access
 is local to Python callers, with no HTTP query endpoint. Store local databases
 under the ignored `local/` directory and use synthetic data for demonstrations.
 
-JSON and SQLite use available dependencies and Python's standard library for
-this local increment. The planned YAML policy store and PostgreSQL audit adapter,
-roles, migrations and integrity model remain pending. No production deployment,
-automatic schema migration or approval of institutional policy is implied.
+JSON and SQLite use Python's standard library and remain the local prototype.
+The planned YAML policy store remains pending. No production deployment or
+approval of institutional policy is implied.
+
+## PostgreSQL audit store
+
+Set `GOVERNANCE_DATABASE_URL` (a libpq URL or key/value string) instead of
+`GOVERNANCE_DATABASE` to use PostgreSQL 16 or later. Configuring both fails.
+The same ports and HTTP behavior apply; storage failures deny the Q&A output.
+
+1. Create the roles with `centinela-ops/production/governance/`. The runtime
+   role has `SELECT` and `INSERT` only.
+2. Apply the migrations as the migrator role:
+   `GOVERNANCE_DATABASE_URL=<migrator URL> python -m app.cli migrate`.
+3. Start the service with the runtime role. It refuses to start if migrations
+   are missing or if the role can update, delete or truncate a table.
+
+Every write appends an event to `audit_events` in the same transaction, with
+`hash = sha256(prev_hash || canonical JSON body)`. Events carry metadata, the
+request trace ID and SHA-256 digests of retained content, never the content.
+Triggers reject `UPDATE`, `DELETE` and `TRUNCATE` even from the table owner.
+
+With the read-only audit role and `GOVERNANCE_AUDIT_CHECKPOINT_PATH`:
+
+- `python -m app.cli verify-audit` recomputes the chain and reports the first
+  broken sequence (exit code 1).
+- `python -m app.cli checkpoint-audit` stores the head of a valid chain in a
+  JSON lines file. Keep it where the service cannot write; it is the reference
+  that reveals a rewritten or truncated chain.
+
+Limits: a superuser can still disable triggers; the chain makes that visible
+only up to the last checkpoint. Retained content is stored in clear until
+AB#321. See [ADR 0006](docs/adr/0006-postgresql-audit-store-with-hash-chain.md).
 
 ## Run locally
 
@@ -222,6 +254,10 @@ uses its --port argument. Invalid settings fail during application creation.
 .\.venv\Scripts\python.exe -m pytest --cov=app --cov-report=term-missing --cov-report=xml --junitxml=report.xml
 ```
 
+PostgreSQL tests are marked `integration` and run when
+`GOVERNANCE_TEST_POSTGRES_URL` points to a role that can create roles and
+schemas (CI starts one). Without it they are skipped.
+
 Coverage includes branches and must reach 90%. Coding, testing, security and
 review rules are in [the engineering standards](docs/engineering-standards.md);
 Ruff and `tests/test_architecture.py` enforce part of them. The CI workflow targets
@@ -245,8 +281,8 @@ only. No database or upstream connection is needed for this increment.
 The default configuration leaves governed Q&A disabled. Domain models and repository protocols
 are independent of frameworks and storage. Application use cases evaluate and
 record decisions through those protocols. Infrastructure supplies strict JSON
-policy loading, response validation and SQLite storage; `main` composes them for
-the offline workflow. The application does not import Pydantic, HTTP or SQLite.
+policy loading, response validation, SQLite storage and the PostgreSQL audit
+store; `main` composes them. The application does not import Pydantic, HTTP or SQLite.
 `app.api.errors` maps domain errors to coded responses. There is no gateway
 interception or automatic content release.
 Decisions are recorded under `docs/adr/`.
@@ -265,8 +301,8 @@ AB#223 (workflows/templates) and AB#224 (container configuration).
 Local thesis context and evidence are maintained outside this repository.
 The local Q&A assessment advances AB#230/231 (policy evaluation and tests).
 Local policy loading and decision snapshots provide partial groundwork for
-AB#217/218/236/237 and AB#258/260. They do not complete the YAML or PostgreSQL
-tasks. Protected review cases advance AB#240/241 locally; the PostgreSQL
+AB#217/218/236/237. The PostgreSQL store, roles, hash chain and its
+verification implement AB#258/259/260 (ADR 0006); the YAML task is pending. Protected review cases advance AB#240/241 locally; the PostgreSQL
 repository, 202 response, request evidence and explanation remain pending.
 Administrator token verification implements AB#248 locally.
 Review resolutions and expiry advance AB#244/245 and the case view advances

@@ -19,6 +19,9 @@ line-length = 88
 testpaths = ["tests"]
 pythonpath = ["."]
 addopts = "--strict-markers --strict-config"
+markers = [
+    "integration: needs PostgreSQL at GOVERNANCE_TEST_POSTGRES_URL",
+]
 
 [tool.coverage.run]
 branch = true

@@ -18,6 +18,8 @@ packaging==26.3
 pathspec==1.1.1
 platformdirs==4.12.3
 pluggy==1.6.0
+psycopg==3.3.9
+psycopg-binary==3.3.9
 pydantic==2.13.5
 pydantic-core==2.46.5
 pydantic-settings==2.15.0
@@ -31,4 +33,5 @@ ruff==0.16.10
 starlette==1.7.0
 typing-extensions==4.16.0
 typing-inspection==0.4.4
+tzdata==2026.6
 uvicorn==0.54.0

@@ -1,5 +1,4 @@
 import json
-import sqlite3
 from pathlib import Path
 from typing import Annotated, Literal, Self
 from uuid import UUID
@@ -27,6 +26,7 @@ from app.domain.qa_sampling import (
 from app.domain.resolution import MAX_JUSTIFICATION_LENGTH, JustificationRequiredError
 from app.domain.supervision import Supervisor
 from app.infrastructure.sqlite_assessment_repository import SqliteQaDeliveryRepository
+from app.infrastructure.storage_errors import STORAGE_ERRORS
 
 router = APIRouter(
     prefix="/qa-samples",
@@ -91,7 +91,7 @@ def create_sample(
         )
     except InsufficientDeliveriesError:
         raise
-    except (OSError, sqlite3.Error, TypeError, ValueError) as error:
+    except (OSError, *STORAGE_ERRORS, TypeError, ValueError) as error:
         raise SupervisionNotConfiguredError from error
     response.headers["Cache-Control"] = "no-store"
     return sample
@@ -101,7 +101,7 @@ def create_sample(
 def get_sample(sample_id: UUID, request: Request, response: Response) -> QaSample:
     try:
         sample = _repository(request).get(sample_id)
-    except (sqlite3.Error, ValueError) as error:
+    except (*STORAGE_ERRORS, ValueError) as error:
         raise SupervisionNotConfiguredError from error
     response.headers["Cache-Control"] = "no-store"
     return sample
@@ -125,7 +125,7 @@ def read_delivery(
         content = repository.review_content(
             _selected(repository, sample_id, assessment_id)
         )
-    except (sqlite3.Error, ValueError) as error:
+    except (*STORAGE_ERRORS, ValueError) as error:
         raise SupervisionNotConfiguredError from error
     response.headers["Cache-Control"] = "no-store"
     return content
@@ -155,7 +155,7 @@ def resolve_delivery(
                 "supervisor_snapshot": {"display_name": supervisor.display_name},
             },
         )
-    except (sqlite3.Error, ValueError) as error:
+    except (*STORAGE_ERRORS, ValueError) as error:
         raise SupervisionNotConfiguredError from error
     response.headers["Cache-Control"] = "no-store"
     return result
@@ -166,7 +166,7 @@ def interventions(sample_id: UUID, request: Request, response: Response) -> dict
     repository = _repository(request)
     try:
         counts = repository.intervention_counts(repository.get(sample_id))
-    except (sqlite3.Error, ValueError) as error:
+    except (*STORAGE_ERRORS, ValueError) as error:
         raise SupervisionNotConfiguredError from error
     response.headers["Cache-Control"] = "no-store"
     return {

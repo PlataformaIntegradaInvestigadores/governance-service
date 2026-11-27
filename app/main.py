@@ -7,9 +7,16 @@ from fastapi import FastAPI, Request, Response
 from fastapi.openapi.utils import get_openapi
 
 from app import __version__
-from app.api import governed_qa, qa_samples, review_cases, supervisors
+from app.api import (
+    decision_explanations,
+    governed_qa,
+    qa_samples,
+    review_cases,
+    supervisors,
+)
 from app.api.errors import register_error_handlers
 from app.api.routes import health_router, router
+from app.application.explain_decision import ExplainDecision
 from app.application.record_qa_assessment import RecordQaAssessment
 from app.application.resolve_review import ReviewCases
 from app.application.supervision import AuthorizeSupervisor
@@ -68,6 +75,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.settings = settings
     application.state.authorize_supervisor = create_supervisor_authorizer(settings)
     application.state.review_cases = create_review_cases(settings)
+    application.state.decision_explainer = (
+        ExplainDecision(
+            SqliteAssessmentRepository(settings.database),
+            SqliteReviewCaseRepository(settings.database),
+        )
+        if settings.database is not None
+        else None
+    )
     application.state.qa_upstream = None
     application.state.qa_release_key = None
     application.state.qa_deliveries = None
@@ -88,6 +103,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(router, prefix="/api/v1")
     application.include_router(supervisors.router, prefix="/api/v1")
     application.include_router(review_cases.router, prefix="/api/v1")
+    application.include_router(decision_explanations.router, prefix="/api/v1")
     application.include_router(governed_qa.router, prefix="/api/v1")
     application.include_router(qa_samples.router, prefix="/api/v1")
     register_error_handlers(application)

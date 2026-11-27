@@ -2,6 +2,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from app.domain.explanation import AssessmentNotFoundError, ExplanationUnavailableError
 from app.domain.qa_sampling import InsufficientDeliveriesError, QaSampleNotFoundError
 from app.domain.resolution import (
     JustificationRequiredError,
@@ -24,6 +25,7 @@ _ERRORS: dict[type[Exception], tuple[int, str]] = {
     AuthenticationError: (401, "AUTHENTICATION_REQUIRED"),
     AdminTokenRejectedError: (403, "ADMIN_TOKEN_REJECTED"),
     ReviewCaseNotFoundError: (404, "CASE_NOT_FOUND"),
+    AssessmentNotFoundError: (404, "ASSESSMENT_NOT_FOUND"),
     QaSampleNotFoundError: (404, "QA_SAMPLE_NOT_FOUND"),
     InsufficientDeliveriesError: (409, "INSUFFICIENT_QA_DELIVERIES"),
     ReviewCaseAlreadyResolvedError: (409, "CASE_ALREADY_RESOLVED"),
@@ -32,6 +34,7 @@ _ERRORS: dict[type[Exception], tuple[int, str]] = {
     RequestValidationError: (422, "INVALID_REQUEST"),
     AdminVerifierUnavailableError: (503, "ADMIN_VERIFIER_UNAVAILABLE"),
     SupervisionNotConfiguredError: (503, "SUPERVISION_NOT_CONFIGURED"),
+    ExplanationUnavailableError: (503, "EXPLANATION_UNAVAILABLE"),
 }
 
 
@@ -40,7 +43,12 @@ def _error_response(request: Request, error: Exception) -> JSONResponse:
     status_code, code = _ERRORS[type(error)]
     headers = {}
     if request.url.path.startswith(
-        ("/api/v1/supervisors/", "/api/v1/review-cases/", "/api/v1/qa-samples/")
+        (
+            "/api/v1/supervisors/",
+            "/api/v1/review-cases/",
+            "/api/v1/qa-samples/",
+            "/api/v1/assessments/",
+        )
     ):
         headers["Cache-Control"] = "no-store"
         if status_code == 401:

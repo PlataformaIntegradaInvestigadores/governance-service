@@ -178,6 +178,15 @@ no case list, and no scheduler calls the expiry sweep. The window is a setting,
 not part of the versioned policy. See
 [ADR 0003](docs/adr/0003-final-review-resolutions-with-expiry.md).
 
+## Supervisor decision explanation
+
+An authorized administrator can read
+`GET /api/v1/assessments/{assessment_id}/explanation`. The Q&A projection returns
+the recorded verdict, reason codes, policy options and the source identifiers
+available in the protected case. It uses the original decision after reviewer
+resolution or a newer policy version. The other case projections are described
+in the [explanation contract](docs/contracts/decision-explanation.v1.md).
+
 ## Local audit limits
 
 Local triggers reject updates and deletes; a policy snapshot checksum detects

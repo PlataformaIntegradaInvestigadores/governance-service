@@ -45,6 +45,7 @@ def test_openapi_is_cached_and_excludes_health():
         "/supervisors/me",
         "/review-cases/{case_id}",
         "/review-cases/{case_id}/resolution",
+        "/assessments/{assessment_id}/explanation",
         "/governed/qa/generate",
         "/governed/qa/reviews/{review_id}",
         "/qa-samples/",

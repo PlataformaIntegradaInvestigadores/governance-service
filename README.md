@@ -222,7 +222,7 @@ With the read-only audit role and `GOVERNANCE_AUDIT_CHECKPOINT_PATH`:
 
 Limits: a superuser can still disable triggers; the chain makes that visible
 only up to the last checkpoint. Retained content is stored in clear until
-AB#321. See [ADR 0006](docs/adr/0006-postgresql-audit-store-with-hash-chain.md).
+AB#321. See [ADR 0008](docs/adr/0008-postgresql-audit-store-with-hash-chain.md).
 
 ## Run locally
 
@@ -302,8 +302,9 @@ Local thesis context and evidence are maintained outside this repository.
 The local Q&A assessment advances AB#230/231 (policy evaluation and tests).
 Local policy loading and decision snapshots provide partial groundwork for
 AB#217/218/236/237. The PostgreSQL store, roles, hash chain and its
-verification implement AB#258/259/260 (ADR 0006); the YAML task is pending. Protected review cases advance AB#240/241 locally; the PostgreSQL
-repository, 202 response, request evidence and explanation remain pending.
+verification implement AB#258/259/260 (ADR 0008); the YAML task is pending.
+Protected review cases advance AB#240/241; the PostgreSQL repository stores
+them in clear until AB#321 adds encryption and retention.
 Administrator token verification implements AB#248 locally.
 Review resolutions and expiry advance AB#244/245 and the case view advances
 AB#242. Next: release through the PEP and the 202 response, the agreed audit

@@ -1,4 +1,4 @@
-# ADR 0006: PostgreSQL audit store with a hash chain
+# ADR 0008: PostgreSQL audit store with a hash chain
 
 ## Status
 

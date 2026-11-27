@@ -1,6 +1,8 @@
+from collections.abc import Iterator
 from datetime import datetime
 from typing import Protocol
 
+from app.domain.audit import AuditCheckpoint, AuditEvent
 from app.domain.qa import QaPolicy, RecordedAssessment
 from app.domain.qa_sampling import QaSample
 from app.domain.resolution import ReviewResolution
@@ -50,3 +52,16 @@ class ReviewResolutionRepository(Protocol):
     def pending_case_ids(self, created_before: datetime) -> tuple[str, ...]:
         """Cases without a resolution that were opened before the given time."""
         ...
+
+
+class AuditEventRepository(Protocol):
+    """Read side of the hash-chained audit log, in sequence order."""
+
+    def events(self) -> Iterator[AuditEvent]: ...
+
+
+class AuditCheckpointRepository(Protocol):
+    """Chain heads kept outside the audit database."""
+
+    def load(self) -> tuple[AuditCheckpoint, ...]: ...
+    def append(self, checkpoint: AuditCheckpoint) -> None: ...

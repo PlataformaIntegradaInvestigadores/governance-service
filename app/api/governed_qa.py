@@ -1,5 +1,4 @@
 import hmac
-import sqlite3
 from typing import Annotated
 from uuid import UUID
 
@@ -11,6 +10,7 @@ from app.domain.qa import Verdict
 from app.domain.resolution import RELEASING_OUTCOMES, ReviewCaseNotFoundError
 from app.domain.review import RetainedQaContent
 from app.infrastructure.qa_response import retain_qa_content
+from app.infrastructure.storage_errors import STORAGE_ERRORS
 
 router = APIRouter(prefix="/governed/qa", tags=["Governed Q&A"])
 _bearer = HTTPBearer(auto_error=False)
@@ -60,7 +60,7 @@ def generate(
         record = state.qa_assessor.execute(upstream)
         if record.assessment.verdict is Verdict.ALLOW:
             return _deliver(request, record.assessment_id, retain_qa_content(upstream))
-    except (OSError, ValueError, sqlite3.Error):
+    except (OSError, ValueError, *STORAGE_ERRORS):
         return _denied(request)
     if record.review_case_id is None:
         return _denied(request)
@@ -91,7 +91,7 @@ def review_status(
         return _denied(request)
     try:
         view = state.review_cases.view(str(review_id))
-    except (ReviewCaseNotFoundError, ValueError, sqlite3.Error):
+    except (ReviewCaseNotFoundError, ValueError, *STORAGE_ERRORS):
         return _denied(request)
     if view.expired:
         return _denied(request)
@@ -105,5 +105,5 @@ def review_status(
             view.record.assessment_id,
             view.resolution.modified_content or view.case.content,
         )
-    except (OSError, ValueError, sqlite3.Error):
+    except (OSError, ValueError, *STORAGE_ERRORS):
         return _denied(request)

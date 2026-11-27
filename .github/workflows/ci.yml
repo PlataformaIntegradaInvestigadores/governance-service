@@ -68,6 +68,18 @@ jobs:
     name: Tests de integración
     runs-on: ubuntu-latest
     needs: lint
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: governance_ci
+          POSTGRES_PASSWORD: governance_ci
+          POSTGRES_DB: governance_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U governance_ci"
+          --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       - name: Descargar código
         uses: actions/checkout@v7
@@ -82,6 +94,8 @@ jobs:
       - name: Ejecutar tests de integración
         env:
           COVERAGE_FILE: coverage-integracion.dat
+          # Throwaway CI service; the password only exists inside this job.
+          GOVERNANCE_TEST_POSTGRES_URL: postgresql://governance_ci:governance_ci@localhost:5432/governance_ci
         run: |
           set +e
           python -m pytest -v --tb=short -m "integration" \

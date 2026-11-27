@@ -16,7 +16,10 @@ class Settings(BaseSettings):
     # Supervisor routes stay unavailable (503) until the verifier is configured.
     admin_verifier_base_url: AnyHttpUrl | None = None
     admin_verifier_timeout_seconds: float = Field(default=3.0, gt=0, le=30)
+    # Local SQLite prototype, or PostgreSQL for the audited store; never both.
     database: Path | None = None
+    database_url: SecretStr | None = Field(default=None, min_length=1)
+    audit_checkpoint_path: Path | None = None
     # Pending cases expire, and are denied, after this window.
     review_window_minutes: int = Field(default=1440, ge=1, le=10080)
     qa_upstream_base_url: AnyHttpUrl | None = None
@@ -50,14 +53,20 @@ class Settings(BaseSettings):
             raise ValueError("Use an absolute URL path without query or fragment")
         return value.rstrip("/") or "/"
 
+    @property
+    def has_store(self) -> bool:
+        return self.database is not None or self.database_url is not None
+
     @model_validator(mode="after")
     def require_qa_settings(self) -> "Settings":
         if self.qa_retain_synthetic_deliveries and self.environment != "local":
             raise ValueError(
                 "Synthetic delivery retention requires the local environment"
             )
+        if self.database is not None and self.database_url is not None:
+            raise ValueError("Configure either a SQLite database or PostgreSQL")
         if self.qa_upstream_base_url is not None and (
-            self.database is None or self.qa_release_key is None
+            not self.has_store or self.qa_release_key is None
         ):
             raise ValueError("Governed Q&A requires a database and a release key")
         return self

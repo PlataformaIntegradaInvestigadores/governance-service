@@ -1,12 +1,14 @@
 import hashlib
 import json
 import sqlite3
+from collections.abc import Callable
 from contextlib import closing
 from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID
 
+from app.domain.fairness_monitor import MonitorPolicy, SelectionCounts
 from app.domain.qa import (
     Assessment,
     PolicyVersionConflictError,
@@ -15,19 +17,26 @@ from app.domain.qa import (
     Verdict,
 )
 from app.domain.qa_sampling import QaSample, QaSampleNotFoundError, QaSamplingPolicy
+from app.domain.recommender import RecommenderPolicy
 from app.domain.resolution import (
     ReviewCaseAlreadyResolvedError,
     ReviewOutcome,
     ReviewResolution,
 )
 from app.domain.review import (
+    RecommendationSelection,
     RetainedQaContent,
     RetainedQaPair,
+    RetainedRecommendation,
     ReviewCase,
     ReviewCaseIntegrityError,
     require_review_case_link,
 )
 from app.domain.supervision import Supervisor
+from app.infrastructure.sqlite_fairness_monitor import (
+    MONITOR_SCHEMA,
+    observe_recommendation,
+)
 
 _ASSESSMENTS = """
 CREATE TABLE IF NOT EXISTS assessments (
@@ -62,6 +71,17 @@ CREATE TABLE IF NOT EXISTS policies (
     PRIMARY KEY (policy_id, version)
 );
 {_ASSESSMENTS}
+{MONITOR_SCHEMA}
+CREATE TABLE IF NOT EXISTS recommender_audit (
+    assessment_id TEXT PRIMARY KEY NOT NULL REFERENCES assessments(assessment_id),
+    metadata_json TEXT NOT NULL
+);
+CREATE TRIGGER IF NOT EXISTS recommender_audit_no_update
+BEFORE UPDATE ON recommender_audit
+BEGIN SELECT RAISE(ABORT, 'Recommendation audit is append-only'); END;
+CREATE TRIGGER IF NOT EXISTS recommender_audit_no_delete
+BEFORE DELETE ON recommender_audit
+BEGIN SELECT RAISE(ABORT, 'Recommendation audit is append-only'); END;
 CREATE TABLE IF NOT EXISTS qa_deliveries (
     assessment_id TEXT PRIMARY KEY NOT NULL REFERENCES assessments(assessment_id),
     prepared_at TEXT NOT NULL,
@@ -149,6 +169,18 @@ def _initialize(path: Path) -> None:
         ).fetchone()
         if "'allow'" not in schema:
             _migrate_assessment_verdicts(connection)
+        table_info = connection.execute("PRAGMA table_info(review_resolutions)")
+        columns = {row[1] for row in table_info}
+        if "proposed_outcome" not in columns:
+            connection.execute(
+                "ALTER TABLE review_resolutions ADD COLUMN proposed_outcome TEXT "
+                "CHECK (proposed_outcome IN ('approve', 'modify', 'reject'))"
+            )
+            connection.execute(
+                "ALTER TABLE review_resolutions ADD COLUMN departed_from_plan INTEGER "
+                "CHECK ((departed_from_plan IS NULL) = (proposed_outcome IS NULL) "
+                "AND (departed_from_plan IS NULL OR departed_from_plan IN (0, 1)))"
+            )
 
 
 def _migrate_assessment_verdicts(connection: sqlite3.Connection) -> None:
@@ -170,7 +202,13 @@ def _sha256(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def _content_json(content: RetainedQaContent) -> str:
+def _content_json(
+    content: RetainedQaContent | RetainedRecommendation | RecommendationSelection,
+) -> str:
+    if isinstance(content, RecommendationSelection):
+        return json.dumps({"retained_ranks": content.ranks})
+    if isinstance(content, RetainedRecommendation):
+        return json.dumps({"recommendation": asdict(content)}, sort_keys=True)
     document = {
         "qa_pairs": [
             {"question": pair.question, "answer": pair.answer}
@@ -183,8 +221,16 @@ def _content_json(content: RetainedQaContent) -> str:
     )
 
 
-def _read_content(document_json: str) -> RetainedQaContent:
+def _read_content(
+    document_json: str,
+) -> RetainedQaContent | RetainedRecommendation | RecommendationSelection:
     document = json.loads(document_json)
+    if "retained_ranks" in document:
+        return RecommendationSelection(tuple(document["retained_ranks"]))
+    if "recommendation" in document:
+        recommendation = document["recommendation"]
+        recommendation["allowed_ranks"] = tuple(recommendation["allowed_ranks"])
+        return RetainedRecommendation(**recommendation)
     return RetainedQaContent(
         tuple(
             RetainedQaPair(pair["question"], pair["answer"])
@@ -204,7 +250,68 @@ class SqliteAssessmentRepository:
         self._path = path
         _initialize(path)
 
-    def save(self, record: RecordedAssessment, review_case: ReviewCase | None) -> None:
+    def save(
+        self,
+        record: RecordedAssessment,
+        review_case: ReviewCase | None,
+        recommendation_audit: dict[str, object] | None = None,
+    ) -> None:
+        with closing(sqlite3.connect(self._path)) as connection, connection:
+            connection.execute("PRAGMA foreign_keys = ON")
+            self._save(connection, record, review_case, recommendation_audit)
+
+    def save_monitored_recommendation(
+        self,
+        monitor: tuple[str, MonitorPolicy],
+        recommender_version: str,
+        counts: SelectionCounts,
+        build: Callable[[bool], tuple[RecordedAssessment, ReviewCase | None]],
+        audit: dict[str, object],
+    ) -> tuple[RecordedAssessment, ReviewCase | None]:
+        version, policy = monitor
+        with closing(sqlite3.connect(self._path)) as connection, connection:
+            connection.execute("PRAGMA foreign_keys = ON")
+            connection.execute("BEGIN IMMEDIATE")
+            self._store_policy(
+                connection, "recommender-monitor", version, asdict(policy)
+            )
+            require_review, sequence = observe_recommendation(
+                connection, version, policy, recommender_version, counts
+            )
+            record, case = build(require_review)
+            self._save(connection, record, case, audit | {"monitor_sequence": sequence})
+        return record, case
+
+    @staticmethod
+    def _store_policy(
+        connection: sqlite3.Connection,
+        policy_id: str,
+        version: str,
+        policy_fields: dict[str, object],
+    ) -> None:
+        snapshot = json.dumps(policy_fields, sort_keys=True, separators=(",", ":"))
+        digest = _sha256(snapshot)
+        connection.execute(
+            "INSERT OR IGNORE INTO policies VALUES (?, ?, ?, ?)",
+            (policy_id, version, snapshot, digest),
+        )
+        stored = connection.execute(
+            "SELECT snapshot_json, sha256 FROM policies "
+            "WHERE policy_id = ? AND version = ?",
+            (policy_id, version),
+        ).fetchone()
+        if stored != (snapshot, digest):
+            raise PolicyVersionConflictError(
+                "Policy content changed without a new version"
+            )
+
+    @staticmethod
+    def _save(
+        connection: sqlite3.Connection,
+        record: RecordedAssessment,
+        review_case: ReviewCase | None,
+        recommendation_audit: dict[str, object] | None,
+    ) -> None:
         require_review_case_link(record, review_case)
         policy = record.policy
         assessment = record.assessment
@@ -214,49 +321,40 @@ class SqliteAssessmentRepository:
         ):
             raise ValueError("Assessment and policy identities must match")
         policy_fields = asdict(policy)
-        if not policy.allow_complete:
+        if isinstance(policy, QaPolicy) and not policy.allow_complete:
             # Keep existing review-only snapshots byte-for-byte compatible.
             del policy_fields["allow_complete"]
-        snapshot = json.dumps(policy_fields, sort_keys=True, separators=(",", ":"))
-        digest = _sha256(snapshot)
-        with closing(sqlite3.connect(self._path)) as connection, connection:
-            connection.execute("PRAGMA foreign_keys = ON")
+        SqliteAssessmentRepository._store_policy(
+            connection, policy.policy_id, policy.version, policy_fields
+        )
+        connection.execute(
+            "INSERT INTO assessments VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                record.assessment_id,
+                record.created_at.isoformat(),
+                policy.policy_id,
+                policy.version,
+                assessment.verdict.value,
+                json.dumps(assessment.reason_codes),
+            ),
+        )
+        if review_case is not None:
+            content = _content_json(review_case.content)
             connection.execute(
-                "INSERT OR IGNORE INTO policies VALUES (?, ?, ?, ?)",
-                (policy.policy_id, policy.version, snapshot, digest),
-            )
-            stored = connection.execute(
-                "SELECT snapshot_json, sha256 FROM policies "
-                "WHERE policy_id = ? AND version = ?",
-                (policy.policy_id, policy.version),
-            ).fetchone()
-            if stored != (snapshot, digest):
-                raise PolicyVersionConflictError(
-                    "Policy content changed without a new version"
-                )
-            connection.execute(
-                "INSERT INTO assessments VALUES (?, ?, ?, ?, ?, ?)",
+                "INSERT INTO review_cases VALUES (?, ?, ?, ?, ?)",
                 (
-                    record.assessment_id,
-                    record.created_at.isoformat(),
-                    policy.policy_id,
-                    policy.version,
-                    assessment.verdict.value,
-                    json.dumps(assessment.reason_codes),
+                    review_case.case_id,
+                    review_case.assessment_id,
+                    review_case.created_at.isoformat(),
+                    content,
+                    _sha256(content),
                 ),
             )
-            if review_case is not None:
-                content = _content_json(review_case.content)
-                connection.execute(
-                    "INSERT INTO review_cases VALUES (?, ?, ?, ?, ?)",
-                    (
-                        review_case.case_id,
-                        review_case.assessment_id,
-                        review_case.created_at.isoformat(),
-                        content,
-                        _sha256(content),
-                    ),
-                )
+        if recommendation_audit is not None:
+            connection.execute(
+                "INSERT INTO recommender_audit VALUES (?, ?)",
+                (record.assessment_id, json.dumps(recommendation_audit)),
+            )
 
     def get(self, assessment_id: str) -> RecordedAssessment | None:
         with closing(sqlite3.connect(self._path)) as connection:
@@ -273,10 +371,16 @@ class SqliteAssessmentRepository:
             return None
         if _sha256(row["snapshot_json"]) != row["sha256"]:
             raise ValueError("Stored policy snapshot digest mismatch")
+        fields = json.loads(row["snapshot_json"])
+        policy = (
+            RecommenderPolicy(**fields)
+            if "protected_attribute" in fields
+            else QaPolicy(**fields)
+        )
         return RecordedAssessment(
             row["assessment_id"],
             datetime.fromisoformat(row["created_at"]),
-            QaPolicy(**json.loads(row["snapshot_json"])),
+            policy,
             Assessment(
                 Verdict(row["verdict"]),
                 row["policy_id"],
@@ -470,11 +574,16 @@ class SqliteReviewCaseRepository:
         case_id, assessment_id, created_at, content, digest = row
         if _sha256(content) != digest:
             raise ReviewCaseIntegrityError("Stored review case digest mismatch")
+        parsed = _read_content(content)
+        if isinstance(parsed, RecommendationSelection):
+            raise ReviewCaseIntegrityError(
+                "Stored case has selection instead of content"
+            )
         return ReviewCase(
             case_id,
             assessment_id,
             datetime.fromisoformat(created_at),
-            _read_content(content),
+            parsed,
         )
 
 
@@ -500,8 +609,11 @@ class SqliteReviewResolutionRepository:
             with closing(sqlite3.connect(self._path)) as connection, connection:
                 connection.execute("PRAGMA foreign_keys = ON")
                 connection.execute(
-                    "INSERT INTO review_resolutions VALUES "
-                    "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    "INSERT INTO review_resolutions (resolution_id, case_id, outcome, "
+                    "resolved_at, expires_at, supervisor_identity_id, "
+                    "supervisor_snapshot_json, justification, modified_content_json, "
+                    "modified_content_sha256, proposed_outcome, departed_from_plan) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (
                         resolution.resolution_id,
                         resolution.case_id,
@@ -517,6 +629,8 @@ class SqliteReviewResolutionRepository:
                         resolution.justification,
                         content,
                         _sha256(content) if content is not None else None,
+                        resolution.proposed_outcome,
+                        resolution.departed_from_plan,
                     ),
                 )
         except sqlite3.IntegrityError as error:
@@ -535,12 +649,17 @@ class SqliteReviewResolutionRepository:
         content = row["modified_content_json"]
         if content is not None and _sha256(content) != row["modified_content_sha256"]:
             raise ReviewCaseIntegrityError("Stored resolution digest mismatch")
+        modified = _read_content(content) if content is not None else None
+        if isinstance(modified, RetainedRecommendation):
+            raise ReviewCaseIntegrityError("Stored resolution has full recommendation")
         supervisor = None
         if row["supervisor_identity_id"] is not None:
             snapshot = json.loads(row["supervisor_snapshot_json"])
             supervisor = Supervisor(
                 row["supervisor_identity_id"], snapshot["display_name"]
             )
+        proposed = row["proposed_outcome"]
+        departed = row["departed_from_plan"]
         return ReviewResolution(
             row["resolution_id"],
             row["case_id"],
@@ -549,7 +668,9 @@ class SqliteReviewResolutionRepository:
             datetime.fromisoformat(row["expires_at"]),
             supervisor,
             row["justification"],
-            _read_content(content) if content is not None else None,
+            modified,
+            ReviewOutcome(proposed) if proposed is not None else None,
+            bool(departed) if departed is not None else None,
         )
 
     def pending_case_ids(self, created_before: datetime) -> tuple[str, ...]:

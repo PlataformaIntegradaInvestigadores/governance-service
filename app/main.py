@@ -7,7 +7,13 @@ from fastapi import FastAPI, Request, Response
 from fastapi.openapi.utils import get_openapi
 
 from app import __version__
-from app.api import governed_qa, qa_samples, review_cases, supervisors
+from app.api import (
+    governed_qa,
+    governed_recommender,
+    qa_samples,
+    review_cases,
+    supervisors,
+)
 from app.api.errors import register_error_handlers
 from app.api.routes import health_router, router
 from app.application.record_qa_assessment import RecordQaAssessment
@@ -21,6 +27,7 @@ from app.infrastructure.admin_token_validator import (
 from app.infrastructure.json_policy_repository import JsonPolicyRepository
 from app.infrastructure.qa_response import assess_qa_response, retain_qa_content
 from app.infrastructure.qa_upstream import QaUpstream
+from app.infrastructure.recommender_upstream import RecommenderUpstream
 from app.infrastructure.sqlite_assessment_repository import (
     SqliteAssessmentRepository,
     SqliteQaDeliveryRepository,
@@ -71,6 +78,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.qa_upstream = None
     application.state.qa_release_key = None
     application.state.qa_deliveries = None
+    application.state.recommender_upstream = None
+    if settings.recommender_upstream_base_url is not None:
+        application.state.recommender_upstream = RecommenderUpstream(
+            str(settings.recommender_upstream_base_url),
+            settings.recommender_timeout_seconds,
+        )
+        application.state.recommender_assessments = SqliteAssessmentRepository(
+            settings.database
+        )
+        application.state.recommender_key = (
+            settings.recommender_hmac_key.get_secret_value().encode()
+        )
     if settings.qa_upstream_base_url is not None:
         application.state.qa_upstream = QaUpstream(
             str(settings.qa_upstream_base_url), settings.qa_timeout_seconds
@@ -89,6 +108,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(supervisors.router, prefix="/api/v1")
     application.include_router(review_cases.router, prefix="/api/v1")
     application.include_router(governed_qa.router, prefix="/api/v1")
+    application.include_router(governed_recommender.router, prefix="/api/v1")
     application.include_router(qa_samples.router, prefix="/api/v1")
     register_error_handlers(application)
 

@@ -2,6 +2,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 
+from app.domain.recommender import RecommenderPolicy
+
 
 class GenerationStatus(StrEnum):
     SUCCESS = "success"
@@ -51,7 +53,7 @@ class Assessment:
 class RecordedAssessment:
     assessment_id: str
     created_at: datetime
-    policy: QaPolicy
+    policy: QaPolicy | RecommenderPolicy
     assessment: Assessment
     review_case_id: str | None = None
 

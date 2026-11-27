@@ -1,0 +1,3040 @@
+{
+ "version": "reco-ref-2 (2026-11-14, borrador)",
+ "service": "ethical-recommender-service d502b65",
+ "policy": {
+  "version": "reco-draft-2",
+  "lambda": 0.8,
+  "max_per_institution": 3,
+  "min_low_visibility_share": 0.2,
+  "relevance_floor": 0.5,
+  "mode": "prefix",
+  "baseline": "retain"
+ },
+ "cases": [
+  {
+   "id": "RR01",
+   "kind": "límite",
+   "scenario": "S-R01",
+   "description": "Petición por defecto; la lista tiene justo la cuota mínima (Q = 4 de 20)",
+   "capture": "limite_exacto",
+   "mutation": null,
+   "request": {
+    "author_ids": [
+     "90000000116"
+    ]
+   },
+   "upstream_status": 200,
+   "upstream_response": {
+    "model": "synthetic/minilm-like",
+    "team": [
+     {
+      "author_id": "90000000116",
+      "name": "Ficticio116 A.",
+      "institution": "universidad ficticia 16",
+      "low_visibility": false
+     }
+    ],
+    "recommendations": [
+     {
+      "author_id": "90000000400",
+      "name": "Ficticio400 A.",
+      "institution": "universidad ficticia 0",
+      "low_visibility": true,
+      "rank": 1,
+      "baseline_rank": 1,
+      "relevance_score": 0.411274,
+      "relevance_norm": 1.0,
+      "institution_novelty": 1.0,
+      "final_score": 1.0,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000518",
+      "name": "Ficticio518 A.",
+      "institution": "universidad ficticia 18",
+      "low_visibility": true,
+      "rank": 2,
+      "baseline_rank": 2,
+      "relevance_score": 0.368699,
+      "relevance_norm": 0.84817,
+      "institution_novelty": 1.0,
+      "final_score": 0.878536,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000094",
+      "name": "Ficticio94 A.",
+      "institution": "universidad ficticia 19",
+      "low_visibility": true,
+      "rank": 3,
+      "baseline_rank": 3,
+      "relevance_score": 0.357082,
+      "relevance_norm": 0.806741,
+      "institution_novelty": 1.0,
+      "final_score": 0.845393,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000311",
+      "name": "Ficticio311 A.",
+      "institution": "universidad ficticia 11",
+      "low_visibility": false,
+      "rank": 4,
+      "baseline_rank": 5,
+      "relevance_score": 0.312829,
+      "relevance_norm": 0.648926,
+      "institution_novelty": 1.0,
+      "final_score": 0.719141,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000039",
+      "name": "Ficticio39 A.",
+      "institution": "universidad ficticia 14",
+      "low_visibility": false,
+      "rank": 5,
+      "baseline_rank": 6,
+      "relevance_score": 0.308466,
+      "relevance_norm": 0.633365,
+      "institution_novelty": 1.0,
+      "final_score": 0.706692,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000024",
+      "name": "Ficticio24 A.",
+      "institution": "universidad ficticia 24",
+      "low_visibility": false,
+      "rank": 6,
+      "baseline_rank": 7,
+      "relevance_score": 0.307335,
+      "relevance_norm": 0.629332,
+      "institution_novelty": 1.0,
+      "final_score": 0.703466,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000042",
+      "name": "Ficticio42 A.",
+      "institution": "universidad ficticia 17",
+      "low_visibility": false,
+      "rank": 7,
+      "baseline_rank": 8,
+      "relevance_score": 0.306221,
+      "relevance_norm": 0.62536,
+      "institution_novelty": 1.0,
+      "final_score": 0.700288,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000233",
+      "name": "Ficticio233 A.",
+      "institution": "universidad ficticia 8",
+      "low_visibility": false,
+      "rank": 8,
+      "baseline_rank": 9,
+      "relevance_score": 0.283905,
+      "relevance_norm": 0.545777,
+      "institution_novelty": 1.0,
+      "final_score": 0.636622,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000104",
+      "name": "Ficticio104 A.",
+      "institution": "universidad ficticia 4",
+      "low_visibility": true,
+      "rank": 9,
+      "baseline_rank": 10,
+      "relevance_score": 0.25857,
+      "relevance_norm": 0.455427,
+      "institution_novelty": 1.0,
+      "final_score": 0.564341,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000319",
+      "name": "Ficticio319 A.",
+      "institution": "UNKNOWN",
+      "low_visibility": false,
+      "rank": 10,
+      "baseline_rank": 4,
+      "relevance_score": 0.326827,
+      "relevance_norm": 0.698847,
+      "institution_novelty": 0.0,
+      "final_score": 0.559078,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000556",
+      "name": "Ficticio556 A.",
+      "institution": "universidad ficticia 6",
+      "low_visibility": false,
+      "rank": 11,
+      "baseline_rank": 13,
+      "relevance_score": 0.240066,
+      "relevance_norm": 0.389438,
+      "institution_novelty": 1.0,
+      "final_score": 0.51155,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000370",
+      "name": "Ficticio370 A.",
+      "institution": "universidad ficticia 20",
+      "low_visibility": false,
+      "rank": 12,
+      "baseline_rank": 14,
+      "relevance_score": 0.238529,
+      "relevance_norm": 0.383958,
+      "institution_novelty": 1.0,
+      "final_score": 0.507166,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000155",
+      "name": "Ficticio155 A.",
+      "institution": "universidad ficticia 5",
+      "low_visibility": false,
+      "rank": 13,
+      "baseline_rank": 17,
+      "relevance_score": 0.229138,
+      "relevance_norm": 0.350464,
+      "institution_novelty": 1.0,
+      "final_score": 0.480372,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000479",
+      "name": "Ficticio479 A.",
+      "institution": "universidad ficticia 4",
+      "low_visibility": false,
+      "rank": 14,
+      "baseline_rank": 11,
+      "relevance_score": 0.256212,
+      "relevance_norm": 0.447019,
+      "institution_novelty": 0.5,
+      "final_score": 0.457615,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000322",
+      "name": "Ficticio322 A.",
+      "institution": "universidad ficticia 22",
+      "low_visibility": false,
+      "rank": 15,
+      "baseline_rank": 25,
+      "relevance_score": 0.217478,
+      "relevance_norm": 0.308884,
+      "institution_novelty": 1.0,
+      "final_score": 0.447107,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000157",
+      "name": "Ficticio157 A.",
+      "institution": "universidad ficticia 7",
+      "low_visibility": false,
+      "rank": 16,
+      "baseline_rank": 26,
+      "relevance_score": 0.216929,
+      "relevance_norm": 0.306927,
+      "institution_novelty": 1.0,
+      "final_score": 0.445542,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000373",
+      "name": "Ficticio373 A.",
+      "institution": "universidad ficticia 23",
+      "low_visibility": false,
+      "rank": 17,
+      "baseline_rank": 32,
+      "relevance_score": 0.203611,
+      "relevance_norm": 0.259433,
+      "institution_novelty": 1.0,
+      "final_score": 0.407546,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000542",
+      "name": "Ficticio542 A.",
+      "institution": "universidad ficticia 17",
+      "low_visibility": false,
+      "rank": 18,
+      "baseline_rank": 15,
+      "relevance_score": 0.238091,
+      "relevance_norm": 0.382394,
+      "institution_novelty": 0.5,
+      "final_score": 0.405915,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000059",
+      "name": "Ficticio59 A.",
+      "institution": "universidad ficticia 9",
+      "low_visibility": false,
+      "rank": 19,
+      "baseline_rank": 35,
+      "relevance_score": 0.200735,
+      "relevance_norm": 0.249174,
+      "institution_novelty": 1.0,
+      "final_score": 0.39934,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000251",
+      "name": "Ficticio251 A.",
+      "institution": "universidad ficticia 1",
+      "low_visibility": false,
+      "rank": 20,
+      "baseline_rank": 36,
+      "relevance_score": 0.199794,
+      "relevance_norm": 0.24582,
+      "institution_novelty": 1.0,
+      "final_score": 0.396656,
+      "selection_reason": "score"
+     }
+    ],
+    "fairness_metrics": {
+     "gini_simpson": 0.936288,
+     "gini_simpson_m2": 0.354571,
+     "unique_institutions": 17.0,
+     "unknown_institution_share": 0.05,
+     "low_visibility_share": 0.2,
+     "low_visibility_exposure_share": 0.345436,
+     "pool_low_visibility_share": 0.12,
+     "ndkl": 0.844138,
+     "relevance_retained": 0.979375
+    },
+    "diagnostics": {
+     "candidates_retrieved": 100,
+     "quota_picks": 0,
+     "quota_shortfalls": 0,
+     "cap_relaxations": 0
+    },
+    "parameters": {
+     "top_k": 20,
+     "k_candidates": 100,
+     "alpha": 1.0,
+     "rerank": {
+      "lambda_": 0.8,
+      "max_per_institution": 3,
+      "min_protected_share": 0.2,
+      "relevance_floor": 0.5,
+      "fairness_mode": "prefix",
+      "fair_alpha": 0.1,
+      "query_institution_penalty": 1.0,
+      "temperature": 0.0,
+      "seed": null
+     }
+    }
+   },
+   "expected": {
+    "verdict": "permit",
+    "reason_codes": []
+   }
+  },
+  {
+   "id": "RR02",
+   "kind": "normal",
+   "scenario": "S-R03",
+   "description": "Petición por defecto; pool con 4 de 100 de baja visibilidad y déficit informado por el servicio",
+   "capture": "defecto_a",
+   "mutation": null,
+   "request": {
+    "author_ids": [
+     "90000000001",
+     "90000000002"
+    ]
+   },
+   "upstream_status": 200,
+   "upstream_response": {
+    "model": "synthetic/minilm-like",
+    "team": [
+     {
+      "author_id": "90000000001",
+      "name": "Ficticio1 A.",
+      "institution": "universidad ficticia 1",
+      "low_visibility": true
+     },
+     {
+      "author_id": "90000000002",
+      "name": "Ficticio2 A.",
+      "institution": "universidad ficticia 2",
+      "low_visibility": false
+     }
+    ],
+    "recommendations": [
+     {
+      "author_id": "90000000208",
+      "name": "Ficticio208 A.",
+      "institution": "universidad ficticia 8",
+      "low_visibility": false,
+      "rank": 1,
+      "baseline_rank": 1,
+      "relevance_score": 0.293143,
+      "relevance_norm": 1.0,
+      "institution_novelty": 1.0,
+      "final_score": 1.0,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000399",
+      "name": "Ficticio399 A.",
+      "institution": "universidad ficticia 24",
+      "low_visibility": false,
+      "rank": 2,
+      "baseline_rank": 2,
+      "relevance_score": 0.276603,
+      "relevance_norm": 0.918576,
+      "institution_novelty": 1.0,
+      "final_score": 0.934861,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000164",
+      "name": "Ficticio164 A.",
+      "institution": "universidad ficticia 14",
+      "low_visibility": false,
+      "rank": 3,
+      "baseline_rank": 3,
+      "relevance_score": 0.262421,
+      "relevance_norm": 0.848756,
+      "institution_novelty": 1.0,
+      "final_score": 0.879005,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000065",
+      "name": "Ficticio65 A.",
+      "institution": "universidad ficticia 15",
+      "low_visibility": false,
+      "rank": 4,
+      "baseline_rank": 5,
+      "relevance_score": 0.247591,
+      "relevance_norm": 0.775751,
+      "institution_novelty": 1.0,
+      "final_score": 0.820601,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000339",
+      "name": "Ficticio339 A.",
+      "institution": "universidad ficticia 14",
+      "low_visibility": false,
+      "rank": 5,
+      "baseline_rank": 4,
+      "relevance_score": 0.255647,
+      "relevance_norm": 0.81541,
+      "institution_novelty": 0.5,
+      "final_score": 0.752328,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000585",
+      "name": "Ficticio585 A.",
+      "institution": "universidad ficticia 10",
+      "low_visibility": false,
+      "rank": 6,
+      "baseline_rank": 6,
+      "relevance_score": 0.209556,
+      "relevance_norm": 0.588504,
+      "institution_novelty": 1.0,
+      "final_score": 0.670803,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000175",
+      "name": "Ficticio175 A.",
+      "institution": "universidad ficticia 0",
+      "low_visibility": false,
+      "rank": 7,
+      "baseline_rank": 8,
+      "relevance_score": 0.201148,
+      "relevance_norm": 0.547111,
+      "institution_novelty": 1.0,
+      "final_score": 0.637689,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000186",
+      "name": "Ficticio186 A.",
+      "institution": "universidad ficticia 11",
+      "low_visibility": false,
+      "rank": 8,
+      "baseline_rank": 9,
+      "relevance_score": 0.191558,
+      "relevance_norm": 0.499903,
+      "institution_novelty": 1.0,
+      "final_score": 0.599922,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000334",
+      "name": "Ficticio334 A.",
+      "institution": "universidad ficticia 9",
+      "low_visibility": false,
+      "rank": 9,
+      "baseline_rank": 11,
+      "relevance_score": 0.187773,
+      "relevance_norm": 0.481268,
+      "institution_novelty": 1.0,
+      "final_score": 0.585014,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000472",
+      "name": "Ficticio472 A.",
+      "institution": "universidad ficticia 22",
+      "low_visibility": false,
+      "rank": 10,
+      "baseline_rank": 13,
+      "relevance_score": 0.179028,
+      "relevance_norm": 0.438217,
+      "institution_novelty": 1.0,
+      "final_score": 0.550574,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000271",
+      "name": "Ficticio271 A.",
+      "institution": "universidad ficticia 21",
+      "low_visibility": false,
+      "rank": 11,
+      "baseline_rank": 14,
+      "relevance_score": 0.176965,
+      "relevance_norm": 0.428058,
+      "institution_novelty": 1.0,
+      "final_score": 0.542447,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000505",
+      "name": "Ficticio505 A.",
+      "institution": "universidad ficticia 5",
+      "low_visibility": false,
+      "rank": 12,
+      "baseline_rank": 15,
+      "relevance_score": 0.176887,
+      "relevance_norm": 0.427676,
+      "institution_novelty": 1.0,
+      "final_score": 0.542141,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000391",
+      "name": "Ficticio391 A.",
+      "institution": "universidad ficticia 16",
+      "low_visibility": false,
+      "rank": 13,
+      "baseline_rank": 23,
+      "relevance_score": 0.164742,
+      "relevance_norm": 0.367888,
+      "institution_novelty": 1.0,
+      "final_score": 0.49431,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000425",
+      "name": "Ficticio425 A.",
+      "institution": "universidad ficticia 0",
+      "low_visibility": false,
+      "rank": 14,
+      "baseline_rank": 10,
+      "relevance_score": 0.188576,
+      "relevance_norm": 0.485221,
+      "institution_novelty": 0.5,
+      "final_score": 0.488177,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000106",
+      "name": "Ficticio106 A.",
+      "institution": "universidad ficticia 6",
+      "low_visibility": false,
+      "rank": 15,
+      "baseline_rank": 26,
+      "relevance_score": 0.162769,
+      "relevance_norm": 0.358173,
+      "institution_novelty": 1.0,
+      "final_score": 0.486538,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000362",
+      "name": "Ficticio362 A.",
+      "institution": "universidad ficticia 12",
+      "low_visibility": false,
+      "rank": 16,
+      "baseline_rank": 27,
+      "relevance_score": 0.162549,
+      "relevance_norm": 0.357091,
+      "institution_novelty": 1.0,
+      "final_score": 0.485673,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000263",
+      "name": "Ficticio263 A.",
+      "institution": "universidad ficticia 13",
+      "low_visibility": true,
+      "rank": 17,
+      "baseline_rank": 29,
+      "relevance_score": 0.15984,
+      "relevance_norm": 0.343754,
+      "institution_novelty": 1.0,
+      "final_score": 0.475003,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000539",
+      "name": "Ficticio539 A.",
+      "institution": "UNKNOWN",
+      "low_visibility": false,
+      "rank": 18,
+      "baseline_rank": 7,
+      "relevance_score": 0.206824,
+      "relevance_norm": 0.575056,
+      "institution_novelty": 0.0,
+      "final_score": 0.460045,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000267",
+      "name": "Ficticio267 A.",
+      "institution": "universidad ficticia 17",
+      "low_visibility": false,
+      "rank": 19,
+      "baseline_rank": 31,
+      "relevance_score": 0.155792,
+      "relevance_norm": 0.323827,
+      "institution_novelty": 1.0,
+      "final_score": 0.459062,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000202",
+      "name": "Ficticio202 A.",
+      "institution": "universidad ficticia 2",
+      "low_visibility": false,
+      "rank": 20,
+      "baseline_rank": 12,
+      "relevance_score": 0.180904,
+      "relevance_norm": 0.447451,
+      "institution_novelty": 0.5,
+      "final_score": 0.457961,
+      "selection_reason": "score"
+     }
+    ],
+    "fairness_metrics": {
+     "gini_simpson": 0.936288,
+     "gini_simpson_m2": 0.354571,
+     "unique_institutions": 17.0,
+     "unknown_institution_share": 0.05,
+     "low_visibility_share": 0.05,
+     "low_visibility_exposure_share": 0.034063,
+     "pool_low_visibility_share": 0.04,
+     "ndkl": 0.035728,
+     "relevance_retained": 0.987675
+    },
+    "diagnostics": {
+     "candidates_retrieved": 100,
+     "quota_picks": 0,
+     "quota_shortfalls": 16,
+     "cap_relaxations": 0
+    },
+    "parameters": {
+     "top_k": 20,
+     "k_candidates": 100,
+     "alpha": 1.0,
+     "rerank": {
+      "lambda_": 0.8,
+      "max_per_institution": 3,
+      "min_protected_share": 0.2,
+      "relevance_floor": 0.5,
+      "fairness_mode": "prefix",
+      "fair_alpha": 0.1,
+      "query_institution_penalty": 1.0,
+      "temperature": 0.0,
+      "seed": null
+     }
+    }
+   },
+   "expected": {
+    "verdict": "permit",
+    "reason_codes": [
+     "LOW_VISIBILITY_SHORTFALL_REPORTED"
+    ]
+   }
+  },
+  {
+   "id": "RR03",
+   "kind": "normal",
+   "scenario": "S-R04",
+   "description": "Interruptor de equidad apagado desde el front (firma exacta de fairness.enabled=false)",
+   "capture": "sin_equidad",
+   "mutation": null,
+   "request": {
+    "author_ids": [
+     "90000000001",
+     "90000000002"
+    ],
+    "fairness": {
+     "enabled": false
+    }
+   },
+   "upstream_status": 200,
+   "upstream_response": {
+    "model": "synthetic/minilm-like",
+    "team": [
+     {
+      "author_id": "90000000001",
+      "name": "Ficticio1 A.",
+      "institution": "universidad ficticia 1",
+      "low_visibility": true
+     },
+     {
+      "author_id": "90000000002",
+      "name": "Ficticio2 A.",
+      "institution": "universidad ficticia 2",
+      "low_visibility": false
+     }
+    ],
+    "recommendations": [
+     {
+      "author_id": "90000000208",
+      "name": "Ficticio208 A.",
+      "institution": "universidad ficticia 8",
+      "low_visibility": false,
+      "rank": 1,
+      "baseline_rank": 1,
+      "relevance_score": 0.293143,
+      "relevance_norm": 1.0,
+      "institution_novelty": 1.0,
+      "final_score": 1.0,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000399",
+      "name": "Ficticio399 A.",
+      "institution": "universidad ficticia 24",
+      "low_visibility": false,
+      "rank": 2,
+      "baseline_rank": 2,
+      "relevance_score": 0.276603,
+      "relevance_norm": 0.918576,
+      "institution_novelty": 1.0,
+      "final_score": 0.918576,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000164",
+      "name": "Ficticio164 A.",
+      "institution": "universidad ficticia 14",
+      "low_visibility": false,
+      "rank": 3,
+      "baseline_rank": 3,
+      "relevance_score": 0.262421,
+      "relevance_norm": 0.848756,
+      "institution_novelty": 1.0,
+      "final_score": 0.848756,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000339",
+      "name": "Ficticio339 A.",
+      "institution": "universidad ficticia 14",
+      "low_visibility": false,
+      "rank": 4,
+      "baseline_rank": 4,
+      "relevance_score": 0.255647,
+      "relevance_norm": 0.81541,
+      "institution_novelty": 0.5,
+      "final_score": 0.81541,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000065",
+      "name": "Ficticio65 A.",
+      "institution": "universidad ficticia 15",
+      "low_visibility": false,
+      "rank": 5,
+      "baseline_rank": 5,
+      "relevance_score": 0.247591,
+      "relevance_norm": 0.775751,
+      "institution_novelty": 1.0,
+      "final_score": 0.775751,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000585",
+      "name": "Ficticio585 A.",
+      "institution": "universidad ficticia 10",
+      "low_visibility": false,
+      "rank": 6,
+      "baseline_rank": 6,
+      "relevance_score": 0.209556,
+      "relevance_norm": 0.588504,
+      "institution_novelty": 1.0,
+      "final_score": 0.588504,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000539",
+      "name": "Ficticio539 A.",
+      "institution": "UNKNOWN",
+      "low_visibility": false,
+      "rank": 7,
+      "baseline_rank": 7,
+      "relevance_score": 0.206824,
+      "relevance_norm": 0.575056,
+      "institution_novelty": 0.0,
+      "final_score": 0.575056,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000175",
+      "name": "Ficticio175 A.",
+      "institution": "universidad ficticia 0",
+      "low_visibility": false,
+      "rank": 8,
+      "baseline_rank": 8,
+      "relevance_score": 0.201148,
+      "relevance_norm": 0.547111,
+      "institution_novelty": 1.0,
+      "final_score": 0.547111,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000186",
+      "name": "Ficticio186 A.",
+      "institution": "universidad ficticia 11",
+      "low_visibility": false,
+      "rank": 9,
+      "baseline_rank": 9,
+      "relevance_score": 0.191558,
+      "relevance_norm": 0.499903,
+      "institution_novelty": 1.0,
+      "final_score": 0.499903,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000425",
+      "name": "Ficticio425 A.",
+      "institution": "universidad ficticia 0",
+      "low_visibility": false,
+      "rank": 10,
+      "baseline_rank": 10,
+      "relevance_score": 0.188576,
+      "relevance_norm": 0.485221,
+      "institution_novelty": 0.5,
+      "final_score": 0.485221,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000334",
+      "name": "Ficticio334 A.",
+      "institution": "universidad ficticia 9",
+      "low_visibility": false,
+      "rank": 11,
+      "baseline_rank": 11,
+      "relevance_score": 0.187773,
+      "relevance_norm": 0.481268,
+      "institution_novelty": 1.0,
+      "final_score": 0.481268,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000202",
+      "name": "Ficticio202 A.",
+      "institution": "universidad ficticia 2",
+      "low_visibility": false,
+      "rank": 12,
+      "baseline_rank": 12,
+      "relevance_score": 0.180904,
+      "relevance_norm": 0.447451,
+      "institution_novelty": 0.5,
+      "final_score": 0.447451,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000472",
+      "name": "Ficticio472 A.",
+      "institution": "universidad ficticia 22",
+      "low_visibility": false,
+      "rank": 13,
+      "baseline_rank": 13,
+      "relevance_score": 0.179028,
+      "relevance_norm": 0.438217,
+      "institution_novelty": 1.0,
+      "final_score": 0.438217,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000271",
+      "name": "Ficticio271 A.",
+      "institution": "universidad ficticia 21",
+      "low_visibility": false,
+      "rank": 14,
+      "baseline_rank": 14,
+      "relevance_score": 0.176965,
+      "relevance_norm": 0.428058,
+      "institution_novelty": 1.0,
+      "final_score": 0.428058,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000505",
+      "name": "Ficticio505 A.",
+      "institution": "universidad ficticia 5",
+      "low_visibility": false,
+      "rank": 15,
+      "baseline_rank": 15,
+      "relevance_score": 0.176887,
+      "relevance_norm": 0.427676,
+      "institution_novelty": 1.0,
+      "final_score": 0.427676,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000552",
+      "name": "Ficticio552 A.",
+      "institution": "universidad ficticia 2",
+      "low_visibility": false,
+      "rank": 16,
+      "baseline_rank": 16,
+      "relevance_score": 0.174795,
+      "relevance_norm": 0.417376,
+      "institution_novelty": 0.333333,
+      "final_score": 0.417376,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000187",
+      "name": "Ficticio187 A.",
+      "institution": "UNKNOWN",
+      "low_visibility": false,
+      "rank": 17,
+      "baseline_rank": 17,
+      "relevance_score": 0.171624,
+      "relevance_norm": 0.401766,
+      "institution_novelty": 0.0,
+      "final_score": 0.401766,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000459",
+      "name": "Ficticio459 A.",
+      "institution": "universidad ficticia 9",
+      "low_visibility": false,
+      "rank": 18,
+      "baseline_rank": 18,
+      "relevance_score": 0.171123,
+      "relevance_norm": 0.399302,
+      "institution_novelty": 0.5,
+      "final_score": 0.399302,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000275",
+      "name": "Ficticio275 A.",
+      "institution": "UNKNOWN",
+      "low_visibility": false,
+      "rank": 19,
+      "baseline_rank": 19,
+      "relevance_score": 0.169768,
+      "relevance_norm": 0.392631,
+      "institution_novelty": 0.0,
+      "final_score": 0.392631,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000511",
+      "name": "Ficticio511 A.",
+      "institution": "universidad ficticia 11",
+      "low_visibility": true,
+      "rank": 20,
+      "baseline_rank": 20,
+      "relevance_score": 0.168802,
+      "relevance_norm": 0.387874,
+      "institution_novelty": 0.5,
+      "final_score": 0.387874,
+      "selection_reason": "score"
+     }
+    ],
+    "fairness_metrics": {
+     "gini_simpson": 0.906574,
+     "gini_simpson_m2": 0.761246,
+     "unique_institutions": 12.0,
+     "unknown_institution_share": 0.15,
+     "low_visibility_share": 0.05,
+     "low_visibility_exposure_share": 0.032338,
+     "pool_low_visibility_share": 0.04,
+     "ndkl": 0.03953,
+     "relevance_retained": 1.0
+    },
+    "diagnostics": {
+     "candidates_retrieved": 100,
+     "quota_picks": 0,
+     "quota_shortfalls": 0,
+     "cap_relaxations": 0
+    },
+    "parameters": {
+     "top_k": 20,
+     "k_candidates": 100,
+     "alpha": 1.0,
+     "rerank": {
+      "lambda_": 1.0,
+      "max_per_institution": null,
+      "min_protected_share": 0.2,
+      "relevance_floor": 0.5,
+      "fairness_mode": "none",
+      "fair_alpha": 0.1,
+      "query_institution_penalty": 1.0,
+      "temperature": 0.0,
+      "seed": null
+     }
+    }
+   },
+   "expected": {
+    "verdict": "retain",
+    "reason_codes": [
+     "FAIRNESS_DISABLED"
+    ],
+    "decision": "reject",
+    "justification": true
+   }
+  },
+  {
+   "id": "RR04",
+   "kind": "normal",
+   "scenario": "S-R04",
+   "description": "relevance_floor=1.0 desde la API: el déficit sale informado, pero por parámetros debilitados",
+   "capture": "piso_1",
+   "mutation": null,
+   "request": {
+    "author_ids": [
+     "90000000001",
+     "90000000002"
+    ],
+    "fairness": {
+     "relevance_floor": 1.0
+    }
+   },
+   "upstream_status": 200,
+   "upstream_response": {
+    "model": "synthetic/minilm-like",
+    "team": [
+     {
+      "author_id": "90000000001",
+      "name": "Ficticio1 A.",
+      "institution": "universidad ficticia 1",
+      "low_visibility": true
+     },
+     {
+      "author_id": "90000000002",
+      "name": "Ficticio2 A.",
+      "institution": "universidad ficticia 2",
+      "low_visibility": false
+     }
+    ],
+    "recommendations": [
+     {
+      "author_id": "90000000208",
+      "name": "Ficticio208 A.",
+      "institution": "universidad ficticia 8",
+      "low_visibility": false,
+      "rank": 1,
+      "baseline_rank": 1,
+      "relevance_score": 0.293143,
+      "relevance_norm": 1.0,
+      "institution_novelty": 1.0,
+      "final_score": 1.0,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000399",
+      "name": "Ficticio399 A.",
+      "institution": "universidad ficticia 24",
+      "low_visibility": false,
+      "rank": 2,
+      "baseline_rank": 2,
+      "relevance_score": 0.276603,
+      "relevance_norm": 0.918576,
+      "institution_novelty": 1.0,
+      "final_score": 0.934861,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000164",
+      "name": "Ficticio164 A.",
+      "institution": "universidad ficticia 14",
+      "low_visibility": false,
+      "rank": 3,
+      "baseline_rank": 3,
+      "relevance_score": 0.262421,
+      "relevance_norm": 0.848756,
+      "institution_novelty": 1.0,
+      "final_score": 0.879005,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000065",
+      "name": "Ficticio65 A.",
+      "institution": "universidad ficticia 15",
+      "low_visibility": false,
+      "rank": 4,
+      "baseline_rank": 5,
+      "relevance_score": 0.247591,
+      "relevance_norm": 0.775751,
+      "institution_novelty": 1.0,
+      "final_score": 0.820601,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000339",
+      "name": "Ficticio339 A.",
+      "institution": "universidad ficticia 14",
+      "low_visibility": false,
+      "rank": 5,
+      "baseline_rank": 4,
+      "relevance_score": 0.255647,
+      "relevance_norm": 0.81541,
+      "institution_novelty": 0.5,
+      "final_score": 0.752328,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000585",
+      "name": "Ficticio585 A.",
+      "institution": "universidad ficticia 10",
+      "low_visibility": false,
+      "rank": 6,
+      "baseline_rank": 6,
+      "relevance_score": 0.209556,
+      "relevance_norm": 0.588504,
+      "institution_novelty": 1.0,
+      "final_score": 0.670803,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000175",
+      "name": "Ficticio175 A.",
+      "institution": "universidad ficticia 0",
+      "low_visibility": false,
+      "rank": 7,
+      "baseline_rank": 8,
+      "relevance_score": 0.201148,
+      "relevance_norm": 0.547111,
+      "institution_novelty": 1.0,
+      "final_score": 0.637689,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000186",
+      "name": "Ficticio186 A.",
+      "institution": "universidad ficticia 11",
+      "low_visibility": false,
+      "rank": 8,
+      "baseline_rank": 9,
+      "relevance_score": 0.191558,
+      "relevance_norm": 0.499903,
+      "institution_novelty": 1.0,
+      "final_score": 0.599922,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000334",
+      "name": "Ficticio334 A.",
+      "institution": "universidad ficticia 9",
+      "low_visibility": false,
+      "rank": 9,
+      "baseline_rank": 11,
+      "relevance_score": 0.187773,
+      "relevance_norm": 0.481268,
+      "institution_novelty": 1.0,
+      "final_score": 0.585014,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000472",
+      "name": "Ficticio472 A.",
+      "institution": "universidad ficticia 22",
+      "low_visibility": false,
+      "rank": 10,
+      "baseline_rank": 13,
+      "relevance_score": 0.179028,
+      "relevance_norm": 0.438217,
+      "institution_novelty": 1.0,
+      "final_score": 0.550574,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000271",
+      "name": "Ficticio271 A.",
+      "institution": "universidad ficticia 21",
+      "low_visibility": false,
+      "rank": 11,
+      "baseline_rank": 14,
+      "relevance_score": 0.176965,
+      "relevance_norm": 0.428058,
+      "institution_novelty": 1.0,
+      "final_score": 0.542447,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000505",
+      "name": "Ficticio505 A.",
+      "institution": "universidad ficticia 5",
+      "low_visibility": false,
+      "rank": 12,
+      "baseline_rank": 15,
+      "relevance_score": 0.176887,
+      "relevance_norm": 0.427676,
+      "institution_novelty": 1.0,
+      "final_score": 0.542141,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000391",
+      "name": "Ficticio391 A.",
+      "institution": "universidad ficticia 16",
+      "low_visibility": false,
+      "rank": 13,
+      "baseline_rank": 23,
+      "relevance_score": 0.164742,
+      "relevance_norm": 0.367888,
+      "institution_novelty": 1.0,
+      "final_score": 0.49431,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000425",
+      "name": "Ficticio425 A.",
+      "institution": "universidad ficticia 0",
+      "low_visibility": false,
+      "rank": 14,
+      "baseline_rank": 10,
+      "relevance_score": 0.188576,
+      "relevance_norm": 0.485221,
+      "institution_novelty": 0.5,
+      "final_score": 0.488177,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000106",
+      "name": "Ficticio106 A.",
+      "institution": "universidad ficticia 6",
+      "low_visibility": false,
+      "rank": 15,
+      "baseline_rank": 26,
+      "relevance_score": 0.162769,
+      "relevance_norm": 0.358173,
+      "institution_novelty": 1.0,
+      "final_score": 0.486538,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000362",
+      "name": "Ficticio362 A.",
+      "institution": "universidad ficticia 12",
+      "low_visibility": false,
+      "rank": 16,
+      "baseline_rank": 27,
+      "relevance_score": 0.162549,
+      "relevance_norm": 0.357091,
+      "institution_novelty": 1.0,
+      "final_score": 0.485673,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000263",
+      "name": "Ficticio263 A.",
+      "institution": "universidad ficticia 13",
+      "low_visibility": true,
+      "rank": 17,
+      "baseline_rank": 29,
+      "relevance_score": 0.15984,
+      "relevance_norm": 0.343754,
+      "institution_novelty": 1.0,
+      "final_score": 0.475003,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000539",
+      "name": "Ficticio539 A.",
+      "institution": "UNKNOWN",
+      "low_visibility": false,
+      "rank": 18,
+      "baseline_rank": 7,
+      "relevance_score": 0.206824,
+      "relevance_norm": 0.575056,
+      "institution_novelty": 0.0,
+      "final_score": 0.460045,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000267",
+      "name": "Ficticio267 A.",
+      "institution": "universidad ficticia 17",
+      "low_visibility": false,
+      "rank": 19,
+      "baseline_rank": 31,
+      "relevance_score": 0.155792,
+      "relevance_norm": 0.323827,
+      "institution_novelty": 1.0,
+      "final_score": 0.459062,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000202",
+      "name": "Ficticio202 A.",
+      "institution": "universidad ficticia 2",
+      "low_visibility": false,
+      "rank": 20,
+      "baseline_rank": 12,
+      "relevance_score": 0.180904,
+      "relevance_norm": 0.447451,
+      "institution_novelty": 0.5,
+      "final_score": 0.457961,
+      "selection_reason": "score"
+     }
+    ],
+    "fairness_metrics": {
+     "gini_simpson": 0.936288,
+     "gini_simpson_m2": 0.354571,
+     "unique_institutions": 17.0,
+     "unknown_institution_share": 0.05,
+     "low_visibility_share": 0.05,
+     "low_visibility_exposure_share": 0.034063,
+     "pool_low_visibility_share": 0.04,
+     "ndkl": 0.035728,
+     "relevance_retained": 0.987675
+    },
+    "diagnostics": {
+     "candidates_retrieved": 100,
+     "quota_picks": 0,
+     "quota_shortfalls": 16,
+     "cap_relaxations": 0
+    },
+    "parameters": {
+     "top_k": 20,
+     "k_candidates": 100,
+     "alpha": 1.0,
+     "rerank": {
+      "lambda_": 0.8,
+      "max_per_institution": 3,
+      "min_protected_share": 0.2,
+      "relevance_floor": 1.0,
+      "fairness_mode": "prefix",
+      "fair_alpha": 0.1,
+      "query_institution_penalty": 1.0,
+      "temperature": 0.0,
+      "seed": null
+     }
+    }
+   },
+   "expected": {
+    "verdict": "retain",
+    "reason_codes": [
+     "FAIRNESS_WEAKENED",
+     "LOW_VISIBILITY_QUOTA_UNMET"
+    ],
+    "decision": "reject",
+    "justification": true
+   }
+  },
+  {
+   "id": "RR05",
+   "kind": "límite",
+   "scenario": "S-R02",
+   "description": "Tope de 1 por institución con un pool de 20: el servicio relaja el tope 6 veces y lo informa",
+   "capture": "tope_1",
+   "mutation": null,
+   "request": {
+    "author_ids": [
+     "90000000003"
+    ],
+    "top_k": 20,
+    "k_candidates": 20,
+    "fairness": {
+     "max_per_institution": 1
+    }
+   },
+   "upstream_status": 200,
+   "upstream_response": {
+    "model": "synthetic/minilm-like",
+    "team": [
+     {
+      "author_id": "90000000003",
+      "name": "Ficticio3 A.",
+      "institution": "universidad ficticia 3",
+      "low_visibility": false
+     }
+    ],
+    "recommendations": [
+     {
+      "author_id": "90000000392",
+      "name": "Ficticio392 A.",
+      "institution": "universidad ficticia 17",
+      "low_visibility": false,
+      "rank": 1,
+      "baseline_rank": 1,
+      "relevance_score": 0.379059,
+      "relevance_norm": 1.0,
+      "institution_novelty": 1.0,
+      "final_score": 1.0,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000487",
+      "name": "Ficticio487 A.",
+      "institution": "universidad ficticia 12",
+      "low_visibility": false,
+      "rank": 2,
+      "baseline_rank": 2,
+      "relevance_score": 0.351152,
+      "relevance_norm": 0.815187,
+      "institution_novelty": 1.0,
+      "final_score": 0.852149,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000348",
+      "name": "Ficticio348 A.",
+      "institution": "universidad ficticia 23",
+      "low_visibility": false,
+      "rank": 3,
+      "baseline_rank": 3,
+      "relevance_score": 0.320478,
+      "relevance_norm": 0.612049,
+      "institution_novelty": 1.0,
+      "final_score": 0.689639,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000277",
+      "name": "Ficticio277 A.",
+      "institution": "universidad ficticia 2",
+      "low_visibility": false,
+      "rank": 4,
+      "baseline_rank": 4,
+      "relevance_score": 0.309294,
+      "relevance_norm": 0.537981,
+      "institution_novelty": 1.0,
+      "final_score": 0.630385,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000524",
+      "name": "Ficticio524 A.",
+      "institution": "universidad ficticia 24",
+      "low_visibility": false,
+      "rank": 5,
+      "baseline_rank": 5,
+      "relevance_score": 0.297424,
+      "relevance_norm": 0.459375,
+      "institution_novelty": 1.0,
+      "final_score": 0.5675,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000271",
+      "name": "Ficticio271 A.",
+      "institution": "universidad ficticia 21",
+      "low_visibility": false,
+      "rank": 6,
+      "baseline_rank": 6,
+      "relevance_score": 0.2965,
+      "relevance_norm": 0.453256,
+      "institution_novelty": 1.0,
+      "final_score": 0.562604,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000290",
+      "name": "Ficticio290 A.",
+      "institution": "universidad ficticia 15",
+      "low_visibility": false,
+      "rank": 7,
+      "baseline_rank": 11,
+      "relevance_score": 0.258368,
+      "relevance_norm": 0.200722,
+      "institution_novelty": 1.0,
+      "final_score": 0.360578,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000038",
+      "name": "Ficticio38 A.",
+      "institution": "universidad ficticia 13",
+      "low_visibility": false,
+      "rank": 8,
+      "baseline_rank": 12,
+      "relevance_score": 0.258341,
+      "relevance_norm": 0.200544,
+      "institution_novelty": 1.0,
+      "final_score": 0.360436,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000591",
+      "name": "Ficticio591 A.",
+      "institution": "universidad ficticia 16",
+      "low_visibility": false,
+      "rank": 9,
+      "baseline_rank": 13,
+      "relevance_score": 0.255263,
+      "relevance_norm": 0.180161,
+      "institution_novelty": 1.0,
+      "final_score": 0.344129,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000406",
+      "name": "Ficticio406 A.",
+      "institution": "universidad ficticia 6",
+      "low_visibility": false,
+      "rank": 10,
+      "baseline_rank": 14,
+      "relevance_score": 0.253863,
+      "relevance_norm": 0.170891,
+      "institution_novelty": 1.0,
+      "final_score": 0.336713,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000025",
+      "name": "Ficticio25 A.",
+      "institution": "universidad ficticia 0",
+      "low_visibility": true,
+      "rank": 11,
+      "baseline_rank": 15,
+      "relevance_score": 0.244688,
+      "relevance_norm": 0.11013,
+      "institution_novelty": 1.0,
+      "final_score": 0.288104,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000036",
+      "name": "Ficticio36 A.",
+      "institution": "universidad ficticia 11",
+      "low_visibility": false,
+      "rank": 12,
+      "baseline_rank": 17,
+      "relevance_score": 0.242302,
+      "relevance_norm": 0.094324,
+      "institution_novelty": 1.0,
+      "final_score": 0.275459,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000374",
+      "name": "Ficticio374 A.",
+      "institution": "UNKNOWN",
+      "low_visibility": false,
+      "rank": 13,
+      "baseline_rank": 10,
+      "relevance_score": 0.265966,
+      "relevance_norm": 0.251043,
+      "institution_novelty": 0.0,
+      "final_score": 0.200834,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000529",
+      "name": "Ficticio529 A.",
+      "institution": "universidad ficticia 4",
+      "low_visibility": false,
+      "rank": 14,
+      "baseline_rank": 20,
+      "relevance_score": 0.228059,
+      "relevance_norm": 0.0,
+      "institution_novelty": 1.0,
+      "final_score": 0.2,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000337",
+      "name": "Ficticio337 A.",
+      "institution": "universidad ficticia 12",
+      "low_visibility": false,
+      "rank": 15,
+      "baseline_rank": 7,
+      "relevance_score": 0.289801,
+      "relevance_norm": 0.408891,
+      "institution_novelty": 0.5,
+      "final_score": 0.427113,
+      "selection_reason": "cap_relaxed"
+     },
+     {
+      "author_id": "90000000196",
+      "name": "Ficticio196 A.",
+      "institution": "universidad ficticia 21",
+      "low_visibility": true,
+      "rank": 16,
+      "baseline_rank": 8,
+      "relevance_score": 0.279517,
+      "relevance_norm": 0.340781,
+      "institution_novelty": 0.5,
+      "final_score": 0.372625,
+      "selection_reason": "cap_relaxed"
+     },
+     {
+      "author_id": "90000000142",
+      "name": "Ficticio142 A.",
+      "institution": "universidad ficticia 17",
+      "low_visibility": false,
+      "rank": 17,
+      "baseline_rank": 9,
+      "relevance_score": 0.269906,
+      "relevance_norm": 0.277137,
+      "institution_novelty": 0.5,
+      "final_score": 0.32171,
+      "selection_reason": "cap_relaxed"
+     },
+     {
+      "author_id": "90000000146",
+      "name": "Ficticio146 A.",
+      "institution": "universidad ficticia 21",
+      "low_visibility": false,
+      "rank": 18,
+      "baseline_rank": 16,
+      "relevance_score": 0.244147,
+      "relevance_norm": 0.106544,
+      "institution_novelty": 0.333333,
+      "final_score": 0.151902,
+      "selection_reason": "cap_relaxed"
+     },
+     {
+      "author_id": "90000000240",
+      "name": "Ficticio240 A.",
+      "institution": "universidad ficticia 15",
+      "low_visibility": false,
+      "rank": 19,
+      "baseline_rank": 18,
+      "relevance_score": 0.231708,
+      "relevance_norm": 0.024168,
+      "institution_novelty": 0.5,
+      "final_score": 0.119334,
+      "selection_reason": "cap_relaxed"
+     },
+     {
+      "author_id": "90000000573",
+      "name": "Ficticio573 A.",
+      "institution": "universidad ficticia 23",
+      "low_visibility": true,
+      "rank": 20,
+      "baseline_rank": 19,
+      "relevance_score": 0.230541,
+      "relevance_norm": 0.016438,
+      "institution_novelty": 0.5,
+      "final_score": 0.11315,
+      "selection_reason": "cap_relaxed"
+     }
+    ],
+    "fairness_metrics": {
+     "gini_simpson": 0.908587,
+     "gini_simpson_m2": 0.753463,
+     "unique_institutions": 13.0,
+     "unknown_institution_share": 0.05,
+     "low_visibility_share": 0.15,
+     "low_visibility_exposure_share": 0.10671,
+     "pool_low_visibility_share": 0.15,
+     "ndkl": 0.110168,
+     "relevance_retained": 1.0
+    },
+    "diagnostics": {
+     "candidates_retrieved": 20,
+     "quota_picks": 0,
+     "quota_shortfalls": 16,
+     "cap_relaxations": 6
+    },
+    "parameters": {
+     "top_k": 20,
+     "k_candidates": 20,
+     "alpha": 1.0,
+     "rerank": {
+      "lambda_": 0.8,
+      "max_per_institution": 1,
+      "min_protected_share": 0.2,
+      "relevance_floor": 0.5,
+      "fairness_mode": "prefix",
+      "fair_alpha": 0.1,
+      "query_institution_penalty": 1.0,
+      "temperature": 0.0,
+      "seed": null
+     }
+    }
+   },
+   "expected": {
+    "verdict": "permit",
+    "reason_codes": [
+     "INSTITUTION_CAP_RELAXED_REPORTED",
+     "LOW_VISIBILITY_SHORTFALL_REPORTED"
+    ]
+   }
+  },
+  {
+   "id": "RR06",
+   "kind": "normal",
+   "scenario": "S-R07",
+   "description": "Equipo con un author_id inexistente: 404 del servicio",
+   "capture": "desconocido",
+   "mutation": null,
+   "request": {
+    "author_ids": [
+     "90000000001",
+     "90000099999"
+    ]
+   },
+   "upstream_status": 404,
+   "upstream_response": {
+    "detail": {
+     "message": "Unknown author_ids",
+     "unknown_author_ids": [
+      "90000099999"
+     ]
+    }
+   },
+   "expected": {
+    "verdict": "client_error",
+    "reason_codes": []
+   }
+  },
+  {
+   "id": "RR07",
+   "kind": "límite",
+   "scenario": "S-R05",
+   "description": "Un recomendado sin fila de metadatos (name=null, UNKNOWN, low_visibility=false)",
+   "capture": "sin_metadatos",
+   "mutation": null,
+   "request": {
+    "author_ids": [
+     "90000000042"
+    ]
+   },
+   "upstream_status": 200,
+   "upstream_response": {
+    "model": "synthetic/minilm-like",
+    "team": [
+     {
+      "author_id": "90000000042",
+      "name": "Ficticio42 A.",
+      "institution": "universidad ficticia 17",
+      "low_visibility": false
+     }
+    ],
+    "recommendations": [
+     {
+      "author_id": "90000000116",
+      "name": "Ficticio116 A.",
+      "institution": "universidad ficticia 16",
+      "low_visibility": false,
+      "rank": 1,
+      "baseline_rank": 1,
+      "relevance_score": 0.306221,
+      "relevance_norm": 1.0,
+      "institution_novelty": 1.0,
+      "final_score": 1.0,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000358",
+      "name": "Ficticio358 A.",
+      "institution": "universidad ficticia 8",
+      "low_visibility": false,
+      "rank": 2,
+      "baseline_rank": 2,
+      "relevance_score": 0.300061,
+      "relevance_norm": 0.967563,
+      "institution_novelty": 1.0,
+      "final_score": 0.974051,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000300",
+      "name": "Ficticio300 A.",
+      "institution": "universidad ficticia 0",
+      "low_visibility": true,
+      "rank": 3,
+      "baseline_rank": 3,
+      "relevance_score": 0.298305,
+      "relevance_norm": 0.958321,
+      "institution_novelty": 1.0,
+      "final_score": 0.966657,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000094",
+      "name": "Ficticio94 A.",
+      "institution": "universidad ficticia 19",
+      "low_visibility": true,
+      "rank": 4,
+      "baseline_rank": 4,
+      "relevance_score": 0.297611,
+      "relevance_norm": 0.954666,
+      "institution_novelty": 1.0,
+      "final_score": 0.963733,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000423",
+      "name": "Ficticio423 A.",
+      "institution": "universidad ficticia 23",
+      "low_visibility": false,
+      "rank": 5,
+      "baseline_rank": 5,
+      "relevance_score": 0.280377,
+      "relevance_norm": 0.863919,
+      "institution_novelty": 1.0,
+      "final_score": 0.891135,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000457",
+      "name": "Ficticio457 A.",
+      "institution": "universidad ficticia 7",
+      "low_visibility": false,
+      "rank": 6,
+      "baseline_rank": 7,
+      "relevance_score": 0.271371,
+      "relevance_norm": 0.816498,
+      "institution_novelty": 1.0,
+      "final_score": 0.853199,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000181",
+      "name": "Ficticio181 A.",
+      "institution": "universidad ficticia 6",
+      "low_visibility": true,
+      "rank": 7,
+      "baseline_rank": 8,
+      "relevance_score": 0.270963,
+      "relevance_norm": 0.814352,
+      "institution_novelty": 1.0,
+      "final_score": 0.851482,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000288",
+      "name": "Ficticio288 A.",
+      "institution": "universidad ficticia 13",
+      "low_visibility": false,
+      "rank": 8,
+      "baseline_rank": 9,
+      "relevance_score": 0.26805,
+      "relevance_norm": 0.799013,
+      "institution_novelty": 1.0,
+      "final_score": 0.83921,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000589",
+      "name": "Ficticio589 A.",
+      "institution": "universidad ficticia 14",
+      "low_visibility": false,
+      "rank": 9,
+      "baseline_rank": 10,
+      "relevance_score": 0.264464,
+      "relevance_norm": 0.780131,
+      "institution_novelty": 1.0,
+      "final_score": 0.824105,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000270",
+      "name": "Ficticio270 A.",
+      "institution": "universidad ficticia 20",
+      "low_visibility": false,
+      "rank": 10,
+      "baseline_rank": 12,
+      "relevance_score": 0.249833,
+      "relevance_norm": 0.703092,
+      "institution_novelty": 1.0,
+      "final_score": 0.762474,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000004",
+      "name": "Ficticio4 A.",
+      "institution": "universidad ficticia 4",
+      "low_visibility": false,
+      "rank": 11,
+      "baseline_rank": 14,
+      "relevance_score": 0.244719,
+      "relevance_norm": 0.676165,
+      "institution_novelty": 1.0,
+      "final_score": 0.740932,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000562",
+      "name": "Ficticio562 A.",
+      "institution": "universidad ficticia 12",
+      "low_visibility": false,
+      "rank": 12,
+      "baseline_rank": 16,
+      "relevance_score": 0.236036,
+      "relevance_norm": 0.630447,
+      "institution_novelty": 1.0,
+      "final_score": 0.704358,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000596",
+      "name": null,
+      "institution": "UNKNOWN",
+      "low_visibility": false,
+      "rank": 13,
+      "baseline_rank": 6,
+      "relevance_score": 0.280297,
+      "relevance_norm": 0.8635,
+      "institution_novelty": 0.0,
+      "final_score": 0.6908,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000140",
+      "name": "Ficticio140 A.",
+      "institution": "universidad ficticia 15",
+      "low_visibility": false,
+      "rank": 14,
+      "baseline_rank": 19,
+      "relevance_score": 0.232067,
+      "relevance_norm": 0.609548,
+      "institution_novelty": 1.0,
+      "final_score": 0.687639,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000153",
+      "name": "Ficticio153 A.",
+      "institution": "universidad ficticia 3",
+      "low_visibility": false,
+      "rank": 15,
+      "baseline_rank": 26,
+      "relevance_score": 0.220816,
+      "relevance_norm": 0.550305,
+      "institution_novelty": 1.0,
+      "final_score": 0.640244,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000476",
+      "name": "Ficticio476 A.",
+      "institution": "universidad ficticia 1",
+      "low_visibility": false,
+      "rank": 16,
+      "baseline_rank": 27,
+      "relevance_score": 0.219622,
+      "relevance_norm": 0.54402,
+      "institution_novelty": 1.0,
+      "final_score": 0.635216,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000309",
+      "name": "Ficticio309 A.",
+      "institution": "universidad ficticia 9",
+      "low_visibility": false,
+      "rank": 17,
+      "baseline_rank": 29,
+      "relevance_score": 0.213388,
+      "relevance_norm": 0.511193,
+      "institution_novelty": 1.0,
+      "final_score": 0.608954,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000388",
+      "name": "Ficticio388 A.",
+      "institution": "universidad ficticia 13",
+      "low_visibility": false,
+      "rank": 18,
+      "baseline_rank": 17,
+      "relevance_score": 0.235018,
+      "relevance_norm": 0.625083,
+      "institution_novelty": 0.5,
+      "final_score": 0.600067,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000462",
+      "name": "Ficticio462 A.",
+      "institution": "UNKNOWN",
+      "low_visibility": false,
+      "rank": 19,
+      "baseline_rank": 11,
+      "relevance_score": 0.255838,
+      "relevance_norm": 0.734709,
+      "institution_novelty": 0.0,
+      "final_score": 0.587768,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000023",
+      "name": "Ficticio23 A.",
+      "institution": "universidad ficticia 23",
+      "low_visibility": true,
+      "rank": 20,
+      "baseline_rank": 21,
+      "relevance_score": 0.228914,
+      "relevance_norm": 0.592944,
+      "institution_novelty": 0.5,
+      "final_score": 0.574355,
+      "selection_reason": "quota"
+     }
+    ],
+    "fairness_metrics": {
+     "gini_simpson": 0.932099,
+     "gini_simpson_m2": 0.37037,
+     "unique_institutions": 16.0,
+     "unknown_institution_share": 0.1,
+     "low_visibility_share": 0.2,
+     "low_visibility_exposure_share": 0.211878,
+     "pool_low_visibility_share": 0.06,
+     "ndkl": 0.245002,
+     "relevance_retained": 0.988153
+    },
+    "diagnostics": {
+     "candidates_retrieved": 100,
+     "quota_picks": 1,
+     "quota_shortfalls": 0,
+     "cap_relaxations": 0
+    },
+    "parameters": {
+     "top_k": 20,
+     "k_candidates": 100,
+     "alpha": 1.0,
+     "rerank": {
+      "lambda_": 0.8,
+      "max_per_institution": 3,
+      "min_protected_share": 0.2,
+      "relevance_floor": 0.5,
+      "fairness_mode": "prefix",
+      "fair_alpha": 0.1,
+      "query_institution_penalty": 1.0,
+      "temperature": 0.0,
+      "seed": null
+     }
+    }
+   },
+   "expected": {
+    "verdict": "retain",
+    "reason_codes": [
+     "PROTECTED_ATTRIBUTE_UNKNOWN"
+    ],
+    "decision": "modify",
+    "justification": true,
+    "removed_ranks": [
+     13
+    ]
+   }
+  },
+  {
+   "id": "RR08",
+   "kind": "normal",
+   "scenario": "S-R04",
+   "description": "lambda=0.9 desde la API: parámetro debilitado, pero la lista cumple tope y cuota de R1",
+   "capture": "lambda_09",
+   "mutation": null,
+   "request": {
+    "author_ids": [
+     "90000000116"
+    ],
+    "fairness": {
+     "lambda": 0.9
+    }
+   },
+   "upstream_status": 200,
+   "upstream_response": {
+    "model": "synthetic/minilm-like",
+    "team": [
+     {
+      "author_id": "90000000116",
+      "name": "Ficticio116 A.",
+      "institution": "universidad ficticia 16",
+      "low_visibility": false
+     }
+    ],
+    "recommendations": [
+     {
+      "author_id": "90000000400",
+      "name": "Ficticio400 A.",
+      "institution": "universidad ficticia 0",
+      "low_visibility": true,
+      "rank": 1,
+      "baseline_rank": 1,
+      "relevance_score": 0.411274,
+      "relevance_norm": 1.0,
+      "institution_novelty": 1.0,
+      "final_score": 1.0,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000518",
+      "name": "Ficticio518 A.",
+      "institution": "universidad ficticia 18",
+      "low_visibility": true,
+      "rank": 2,
+      "baseline_rank": 2,
+      "relevance_score": 0.368699,
+      "relevance_norm": 0.84817,
+      "institution_novelty": 1.0,
+      "final_score": 0.863353,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000094",
+      "name": "Ficticio94 A.",
+      "institution": "universidad ficticia 19",
+      "low_visibility": true,
+      "rank": 3,
+      "baseline_rank": 3,
+      "relevance_score": 0.357082,
+      "relevance_norm": 0.806741,
+      "institution_novelty": 1.0,
+      "final_score": 0.826067,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000311",
+      "name": "Ficticio311 A.",
+      "institution": "universidad ficticia 11",
+      "low_visibility": false,
+      "rank": 4,
+      "baseline_rank": 5,
+      "relevance_score": 0.312829,
+      "relevance_norm": 0.648926,
+      "institution_novelty": 1.0,
+      "final_score": 0.684034,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000039",
+      "name": "Ficticio39 A.",
+      "institution": "universidad ficticia 14",
+      "low_visibility": false,
+      "rank": 5,
+      "baseline_rank": 6,
+      "relevance_score": 0.308466,
+      "relevance_norm": 0.633365,
+      "institution_novelty": 1.0,
+      "final_score": 0.670029,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000024",
+      "name": "Ficticio24 A.",
+      "institution": "universidad ficticia 24",
+      "low_visibility": false,
+      "rank": 6,
+      "baseline_rank": 7,
+      "relevance_score": 0.307335,
+      "relevance_norm": 0.629332,
+      "institution_novelty": 1.0,
+      "final_score": 0.666399,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000042",
+      "name": "Ficticio42 A.",
+      "institution": "universidad ficticia 17",
+      "low_visibility": false,
+      "rank": 7,
+      "baseline_rank": 8,
+      "relevance_score": 0.306221,
+      "relevance_norm": 0.62536,
+      "institution_novelty": 1.0,
+      "final_score": 0.662824,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000319",
+      "name": "Ficticio319 A.",
+      "institution": "UNKNOWN",
+      "low_visibility": false,
+      "rank": 8,
+      "baseline_rank": 4,
+      "relevance_score": 0.326827,
+      "relevance_norm": 0.698847,
+      "institution_novelty": 0.0,
+      "final_score": 0.628963,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000233",
+      "name": "Ficticio233 A.",
+      "institution": "universidad ficticia 8",
+      "low_visibility": false,
+      "rank": 9,
+      "baseline_rank": 9,
+      "relevance_score": 0.283905,
+      "relevance_norm": 0.545777,
+      "institution_novelty": 1.0,
+      "final_score": 0.591199,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000104",
+      "name": "Ficticio104 A.",
+      "institution": "universidad ficticia 4",
+      "low_visibility": true,
+      "rank": 10,
+      "baseline_rank": 10,
+      "relevance_score": 0.25857,
+      "relevance_norm": 0.455427,
+      "institution_novelty": 1.0,
+      "final_score": 0.509884,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000479",
+      "name": "Ficticio479 A.",
+      "institution": "universidad ficticia 4",
+      "low_visibility": false,
+      "rank": 11,
+      "baseline_rank": 11,
+      "relevance_score": 0.256212,
+      "relevance_norm": 0.447019,
+      "institution_novelty": 0.5,
+      "final_score": 0.452317,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000556",
+      "name": "Ficticio556 A.",
+      "institution": "universidad ficticia 6",
+      "low_visibility": false,
+      "rank": 12,
+      "baseline_rank": 13,
+      "relevance_score": 0.240066,
+      "relevance_norm": 0.389438,
+      "institution_novelty": 1.0,
+      "final_score": 0.450494,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000370",
+      "name": "Ficticio370 A.",
+      "institution": "universidad ficticia 20",
+      "low_visibility": false,
+      "rank": 13,
+      "baseline_rank": 14,
+      "relevance_score": 0.238529,
+      "relevance_norm": 0.383958,
+      "institution_novelty": 1.0,
+      "final_score": 0.445562,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000155",
+      "name": "Ficticio155 A.",
+      "institution": "universidad ficticia 5",
+      "low_visibility": false,
+      "rank": 14,
+      "baseline_rank": 17,
+      "relevance_score": 0.229138,
+      "relevance_norm": 0.350464,
+      "institution_novelty": 1.0,
+      "final_score": 0.415418,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000542",
+      "name": "Ficticio542 A.",
+      "institution": "universidad ficticia 17",
+      "low_visibility": false,
+      "rank": 15,
+      "baseline_rank": 15,
+      "relevance_score": 0.238091,
+      "relevance_norm": 0.382394,
+      "institution_novelty": 0.5,
+      "final_score": 0.394155,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000322",
+      "name": "Ficticio322 A.",
+      "institution": "universidad ficticia 22",
+      "low_visibility": false,
+      "rank": 16,
+      "baseline_rank": 25,
+      "relevance_score": 0.217478,
+      "relevance_norm": 0.308884,
+      "institution_novelty": 1.0,
+      "final_score": 0.377995,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000157",
+      "name": "Ficticio157 A.",
+      "institution": "universidad ficticia 7",
+      "low_visibility": false,
+      "rank": 17,
+      "baseline_rank": 26,
+      "relevance_score": 0.216929,
+      "relevance_norm": 0.306927,
+      "institution_novelty": 1.0,
+      "final_score": 0.376235,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000343",
+      "name": "Ficticio343 A.",
+      "institution": "universidad ficticia 18",
+      "low_visibility": false,
+      "rank": 18,
+      "baseline_rank": 18,
+      "relevance_score": 0.228397,
+      "relevance_norm": 0.347824,
+      "institution_novelty": 0.5,
+      "final_score": 0.363041,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000440",
+      "name": "Ficticio440 A.",
+      "institution": "UNKNOWN",
+      "low_visibility": false,
+      "rank": 19,
+      "baseline_rank": 12,
+      "relevance_score": 0.242596,
+      "relevance_norm": 0.398459,
+      "institution_novelty": 0.0,
+      "final_score": 0.358613,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000142",
+      "name": "Ficticio142 A.",
+      "institution": "universidad ficticia 17",
+      "low_visibility": false,
+      "rank": 20,
+      "baseline_rank": 16,
+      "relevance_score": 0.230244,
+      "relevance_norm": 0.354409,
+      "institution_novelty": 0.333333,
+      "final_score": 0.352301,
+      "selection_reason": "score"
+     }
+    ],
+    "fairness_metrics": {
+     "gini_simpson": 0.91358,
+     "gini_simpson_m2": 0.574074,
+     "unique_institutions": 14.0,
+     "unknown_institution_share": 0.1,
+     "low_visibility_share": 0.2,
+     "low_visibility_exposure_share": 0.343736,
+     "pool_low_visibility_share": 0.12,
+     "ndkl": 0.836829,
+     "relevance_retained": 0.996722
+    },
+    "diagnostics": {
+     "candidates_retrieved": 100,
+     "quota_picks": 0,
+     "quota_shortfalls": 0,
+     "cap_relaxations": 0
+    },
+    "parameters": {
+     "top_k": 20,
+     "k_candidates": 100,
+     "alpha": 1.0,
+     "rerank": {
+      "lambda_": 0.9,
+      "max_per_institution": 3,
+      "min_protected_share": 0.2,
+      "relevance_floor": 0.5,
+      "fairness_mode": "prefix",
+      "fair_alpha": 0.1,
+      "query_institution_penalty": 1.0,
+      "temperature": 0.0,
+      "seed": null
+     }
+    }
+   },
+   "expected": {
+    "verdict": "retain",
+    "reason_codes": [
+     "FAIRNESS_WEAKENED"
+    ],
+    "decision": "approve",
+    "justification": true
+   }
+  },
+  {
+   "id": "RR09",
+   "kind": "límite",
+   "scenario": "S-R07",
+   "description": "Alteración: un perfil elegido por cuota llega sin la marca de baja visibilidad",
+   "capture": "defecto_b",
+   "mutation": {
+    "set_profile": {
+     "rank": 10,
+     "field": "low_visibility",
+     "value": false
+    }
+   },
+   "request": {
+    "author_ids": [
+     "90000000010"
+    ]
+   },
+   "upstream_status": 200,
+   "upstream_response": {
+    "model": "synthetic/minilm-like",
+    "team": [
+     {
+      "author_id": "90000000010",
+      "name": "Ficticio10 A.",
+      "institution": "universidad ficticia 10",
+      "low_visibility": false
+     }
+    ],
+    "recommendations": [
+     {
+      "author_id": "90000000332",
+      "name": "Ficticio332 A.",
+      "institution": "universidad ficticia 7",
+      "low_visibility": false,
+      "rank": 1,
+      "baseline_rank": 1,
+      "relevance_score": 0.347842,
+      "relevance_norm": 1.0,
+      "institution_novelty": 1.0,
+      "final_score": 1.0,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000334",
+      "name": "Ficticio334 A.",
+      "institution": "universidad ficticia 9",
+      "low_visibility": false,
+      "rank": 2,
+      "baseline_rank": 2,
+      "relevance_score": 0.335969,
+      "relevance_norm": 0.946942,
+      "institution_novelty": 1.0,
+      "final_score": 0.957554,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000569",
+      "name": "Ficticio569 A.",
+      "institution": "universidad ficticia 19",
+      "low_visibility": true,
+      "rank": 3,
+      "baseline_rank": 3,
+      "relevance_score": 0.331468,
+      "relevance_norm": 0.926826,
+      "institution_novelty": 1.0,
+      "final_score": 0.941461,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000012",
+      "name": "Ficticio12 A.",
+      "institution": "universidad ficticia 12",
+      "low_visibility": false,
+      "rank": 4,
+      "baseline_rank": 4,
+      "relevance_score": 0.331017,
+      "relevance_norm": 0.924811,
+      "institution_novelty": 1.0,
+      "final_score": 0.939849,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000336",
+      "name": "Ficticio336 A.",
+      "institution": "universidad ficticia 11",
+      "low_visibility": false,
+      "rank": 5,
+      "baseline_rank": 5,
+      "relevance_score": 0.311639,
+      "relevance_norm": 0.838216,
+      "institution_novelty": 1.0,
+      "final_score": 0.870573,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000265",
+      "name": "Ficticio265 A.",
+      "institution": "universidad ficticia 15",
+      "low_visibility": false,
+      "rank": 6,
+      "baseline_rank": 6,
+      "relevance_score": 0.305016,
+      "relevance_norm": 0.808617,
+      "institution_novelty": 1.0,
+      "final_score": 0.846894,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000070",
+      "name": "Ficticio70 A.",
+      "institution": "universidad ficticia 20",
+      "low_visibility": false,
+      "rank": 7,
+      "baseline_rank": 8,
+      "relevance_score": 0.271895,
+      "relevance_norm": 0.660605,
+      "institution_novelty": 1.0,
+      "final_score": 0.728484,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000146",
+      "name": "Ficticio146 A.",
+      "institution": "universidad ficticia 21",
+      "low_visibility": false,
+      "rank": 8,
+      "baseline_rank": 9,
+      "relevance_score": 0.265069,
+      "relevance_norm": 0.6301,
+      "institution_novelty": 1.0,
+      "final_score": 0.70408,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000248",
+      "name": "Ficticio248 A.",
+      "institution": "universidad ficticia 23",
+      "low_visibility": false,
+      "rank": 9,
+      "baseline_rank": 11,
+      "relevance_score": 0.255287,
+      "relevance_norm": 0.586386,
+      "institution_novelty": 1.0,
+      "final_score": 0.669109,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000572",
+      "name": "Ficticio572 A.",
+      "institution": "UNKNOWN",
+      "low_visibility": false,
+      "rank": 10,
+      "baseline_rank": 7,
+      "relevance_score": 0.28318,
+      "relevance_norm": 0.711036,
+      "institution_novelty": 0.0,
+      "final_score": 0.568829,
+      "selection_reason": "quota"
+     },
+     {
+      "author_id": "90000000516",
+      "name": "Ficticio516 A.",
+      "institution": "universidad ficticia 16",
+      "low_visibility": false,
+      "rank": 11,
+      "baseline_rank": 12,
+      "relevance_score": 0.254598,
+      "relevance_norm": 0.583311,
+      "institution_novelty": 1.0,
+      "final_score": 0.666648,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000008",
+      "name": "Ficticio8 A.",
+      "institution": "universidad ficticia 8",
+      "low_visibility": false,
+      "rank": 12,
+      "baseline_rank": 16,
+      "relevance_score": 0.245044,
+      "relevance_norm": 0.540613,
+      "institution_novelty": 1.0,
+      "final_score": 0.632491,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000351",
+      "name": "Ficticio351 A.",
+      "institution": "universidad ficticia 1",
+      "low_visibility": false,
+      "rank": 13,
+      "baseline_rank": 17,
+      "relevance_score": 0.240744,
+      "relevance_norm": 0.5214,
+      "institution_novelty": 1.0,
+      "final_score": 0.61712,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000318",
+      "name": "Ficticio318 A.",
+      "institution": "universidad ficticia 18",
+      "low_visibility": false,
+      "rank": 14,
+      "baseline_rank": 18,
+      "relevance_score": 0.231042,
+      "relevance_norm": 0.478042,
+      "institution_novelty": 1.0,
+      "final_score": 0.582434,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000190",
+      "name": "Ficticio190 A.",
+      "institution": "universidad ficticia 15",
+      "low_visibility": false,
+      "rank": 15,
+      "baseline_rank": 10,
+      "relevance_score": 0.258532,
+      "relevance_norm": 0.600888,
+      "institution_novelty": 0.5,
+      "final_score": 0.58071,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000107",
+      "name": "Ficticio107 A.",
+      "institution": "universidad ficticia 7",
+      "low_visibility": false,
+      "rank": 16,
+      "baseline_rank": 13,
+      "relevance_score": 0.254418,
+      "relevance_norm": 0.582504,
+      "institution_novelty": 0.5,
+      "final_score": 0.566003,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000034",
+      "name": "Ficticio34 A.",
+      "institution": "universidad ficticia 9",
+      "low_visibility": false,
+      "rank": 17,
+      "baseline_rank": 15,
+      "relevance_score": 0.251228,
+      "relevance_norm": 0.568251,
+      "institution_novelty": 0.5,
+      "final_score": 0.5546,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000315",
+      "name": "Ficticio315 A.",
+      "institution": "universidad ficticia 15",
+      "low_visibility": false,
+      "rank": 18,
+      "baseline_rank": 14,
+      "relevance_score": 0.253861,
+      "relevance_norm": 0.580016,
+      "institution_novelty": 0.333333,
+      "final_score": 0.53068,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000199",
+      "name": "Ficticio199 A.",
+      "institution": "universidad ficticia 24",
+      "low_visibility": false,
+      "rank": 19,
+      "baseline_rank": 22,
+      "relevance_score": 0.215976,
+      "relevance_norm": 0.410715,
+      "institution_novelty": 1.0,
+      "final_score": 0.528572,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000013",
+      "name": "Ficticio13 A.",
+      "institution": "universidad ficticia 13",
+      "low_visibility": false,
+      "rank": 20,
+      "baseline_rank": 29,
+      "relevance_score": 0.201791,
+      "relevance_norm": 0.347324,
+      "institution_novelty": 1.0,
+      "final_score": 0.47786,
+      "selection_reason": "score"
+     }
+    ],
+    "fairness_metrics": {
+     "gini_simpson": 0.919668,
+     "gini_simpson_m2": 0.554017,
+     "unique_institutions": 15.0,
+     "unknown_institution_share": 0.05,
+     "low_visibility_share": 0.1,
+     "low_visibility_exposure_share": 0.112079,
+     "pool_low_visibility_share": 0.09,
+     "ndkl": 0.057841,
+     "relevance_retained": 0.995651
+    },
+    "diagnostics": {
+     "candidates_retrieved": 100,
+     "quota_picks": 1,
+     "quota_shortfalls": 6,
+     "cap_relaxations": 0
+    },
+    "parameters": {
+     "top_k": 20,
+     "k_candidates": 100,
+     "alpha": 1.0,
+     "rerank": {
+      "lambda_": 0.8,
+      "max_per_institution": 3,
+      "min_protected_share": 0.2,
+      "relevance_floor": 0.5,
+      "fairness_mode": "prefix",
+      "fair_alpha": 0.1,
+      "query_institution_penalty": 1.0,
+      "temperature": 0.0,
+      "seed": null
+     }
+    }
+   },
+   "expected": {
+    "verdict": "deny",
+    "reason_codes": [
+     "UPSTREAM_INCONSISTENT"
+    ]
+   }
+  },
+  {
+   "id": "RR10",
+   "kind": "límite",
+   "scenario": "S-R07",
+   "description": "Alteración: lista bajo la cuota en modo prefix sin déficit, estado imposible en el servicio",
+   "capture": "defecto_a",
+   "mutation": {
+    "set_diagnostic": {
+     "field": "quota_shortfalls",
+     "value": 0
+    }
+   },
+   "request": {
+    "author_ids": [
+     "90000000001",
+     "90000000002"
+    ]
+   },
+   "upstream_status": 200,
+   "upstream_response": {
+    "model": "synthetic/minilm-like",
+    "team": [
+     {
+      "author_id": "90000000001",
+      "name": "Ficticio1 A.",
+      "institution": "universidad ficticia 1",
+      "low_visibility": true
+     },
+     {
+      "author_id": "90000000002",
+      "name": "Ficticio2 A.",
+      "institution": "universidad ficticia 2",
+      "low_visibility": false
+     }
+    ],
+    "recommendations": [
+     {
+      "author_id": "90000000208",
+      "name": "Ficticio208 A.",
+      "institution": "universidad ficticia 8",
+      "low_visibility": false,
+      "rank": 1,
+      "baseline_rank": 1,
+      "relevance_score": 0.293143,
+      "relevance_norm": 1.0,
+      "institution_novelty": 1.0,
+      "final_score": 1.0,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000399",
+      "name": "Ficticio399 A.",
+      "institution": "universidad ficticia 24",
+      "low_visibility": false,
+      "rank": 2,
+      "baseline_rank": 2,
+      "relevance_score": 0.276603,
+      "relevance_norm": 0.918576,
+      "institution_novelty": 1.0,
+      "final_score": 0.934861,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000164",
+      "name": "Ficticio164 A.",
+      "institution": "universidad ficticia 14",
+      "low_visibility": false,
+      "rank": 3,
+      "baseline_rank": 3,
+      "relevance_score": 0.262421,
+      "relevance_norm": 0.848756,
+      "institution_novelty": 1.0,
+      "final_score": 0.879005,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000065",
+      "name": "Ficticio65 A.",
+      "institution": "universidad ficticia 15",
+      "low_visibility": false,
+      "rank": 4,
+      "baseline_rank": 5,
+      "relevance_score": 0.247591,
+      "relevance_norm": 0.775751,
+      "institution_novelty": 1.0,
+      "final_score": 0.820601,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000339",
+      "name": "Ficticio339 A.",
+      "institution": "universidad ficticia 14",
+      "low_visibility": false,
+      "rank": 5,
+      "baseline_rank": 4,
+      "relevance_score": 0.255647,
+      "relevance_norm": 0.81541,
+      "institution_novelty": 0.5,
+      "final_score": 0.752328,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000585",
+      "name": "Ficticio585 A.",
+      "institution": "universidad ficticia 10",
+      "low_visibility": false,
+      "rank": 6,
+      "baseline_rank": 6,
+      "relevance_score": 0.209556,
+      "relevance_norm": 0.588504,
+      "institution_novelty": 1.0,
+      "final_score": 0.670803,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000175",
+      "name": "Ficticio175 A.",
+      "institution": "universidad ficticia 0",
+      "low_visibility": false,
+      "rank": 7,
+      "baseline_rank": 8,
+      "relevance_score": 0.201148,
+      "relevance_norm": 0.547111,
+      "institution_novelty": 1.0,
+      "final_score": 0.637689,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000186",
+      "name": "Ficticio186 A.",
+      "institution": "universidad ficticia 11",
+      "low_visibility": false,
+      "rank": 8,
+      "baseline_rank": 9,
+      "relevance_score": 0.191558,
+      "relevance_norm": 0.499903,
+      "institution_novelty": 1.0,
+      "final_score": 0.599922,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000334",
+      "name": "Ficticio334 A.",
+      "institution": "universidad ficticia 9",
+      "low_visibility": false,
+      "rank": 9,
+      "baseline_rank": 11,
+      "relevance_score": 0.187773,
+      "relevance_norm": 0.481268,
+      "institution_novelty": 1.0,
+      "final_score": 0.585014,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000472",
+      "name": "Ficticio472 A.",
+      "institution": "universidad ficticia 22",
+      "low_visibility": false,
+      "rank": 10,
+      "baseline_rank": 13,
+      "relevance_score": 0.179028,
+      "relevance_norm": 0.438217,
+      "institution_novelty": 1.0,
+      "final_score": 0.550574,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000271",
+      "name": "Ficticio271 A.",
+      "institution": "universidad ficticia 21",
+      "low_visibility": false,
+      "rank": 11,
+      "baseline_rank": 14,
+      "relevance_score": 0.176965,
+      "relevance_norm": 0.428058,
+      "institution_novelty": 1.0,
+      "final_score": 0.542447,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000505",
+      "name": "Ficticio505 A.",
+      "institution": "universidad ficticia 5",
+      "low_visibility": false,
+      "rank": 12,
+      "baseline_rank": 15,
+      "relevance_score": 0.176887,
+      "relevance_norm": 0.427676,
+      "institution_novelty": 1.0,
+      "final_score": 0.542141,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000391",
+      "name": "Ficticio391 A.",
+      "institution": "universidad ficticia 16",
+      "low_visibility": false,
+      "rank": 13,
+      "baseline_rank": 23,
+      "relevance_score": 0.164742,
+      "relevance_norm": 0.367888,
+      "institution_novelty": 1.0,
+      "final_score": 0.49431,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000425",
+      "name": "Ficticio425 A.",
+      "institution": "universidad ficticia 0",
+      "low_visibility": false,
+      "rank": 14,
+      "baseline_rank": 10,
+      "relevance_score": 0.188576,
+      "relevance_norm": 0.485221,
+      "institution_novelty": 0.5,
+      "final_score": 0.488177,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000106",
+      "name": "Ficticio106 A.",
+      "institution": "universidad ficticia 6",
+      "low_visibility": false,
+      "rank": 15,
+      "baseline_rank": 26,
+      "relevance_score": 0.162769,
+      "relevance_norm": 0.358173,
+      "institution_novelty": 1.0,
+      "final_score": 0.486538,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000362",
+      "name": "Ficticio362 A.",
+      "institution": "universidad ficticia 12",
+      "low_visibility": false,
+      "rank": 16,
+      "baseline_rank": 27,
+      "relevance_score": 0.162549,
+      "relevance_norm": 0.357091,
+      "institution_novelty": 1.0,
+      "final_score": 0.485673,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000263",
+      "name": "Ficticio263 A.",
+      "institution": "universidad ficticia 13",
+      "low_visibility": true,
+      "rank": 17,
+      "baseline_rank": 29,
+      "relevance_score": 0.15984,
+      "relevance_norm": 0.343754,
+      "institution_novelty": 1.0,
+      "final_score": 0.475003,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000539",
+      "name": "Ficticio539 A.",
+      "institution": "UNKNOWN",
+      "low_visibility": false,
+      "rank": 18,
+      "baseline_rank": 7,
+      "relevance_score": 0.206824,
+      "relevance_norm": 0.575056,
+      "institution_novelty": 0.0,
+      "final_score": 0.460045,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000267",
+      "name": "Ficticio267 A.",
+      "institution": "universidad ficticia 17",
+      "low_visibility": false,
+      "rank": 19,
+      "baseline_rank": 31,
+      "relevance_score": 0.155792,
+      "relevance_norm": 0.323827,
+      "institution_novelty": 1.0,
+      "final_score": 0.459062,
+      "selection_reason": "score"
+     },
+     {
+      "author_id": "90000000202",
+      "name": "Ficticio202 A.",
+      "institution": "universidad ficticia 2",
+      "low_visibility": false,
+      "rank": 20,
+      "baseline_rank": 12,
+      "relevance_score": 0.180904,
+      "relevance_norm": 0.447451,
+      "institution_novelty": 0.5,
+      "final_score": 0.457961,
+      "selection_reason": "score"
+     }
+    ],
+    "fairness_metrics": {
+     "gini_simpson": 0.936288,
+     "gini_simpson_m2": 0.354571,
+     "unique_institutions": 17.0,
+     "unknown_institution_share": 0.05,
+     "low_visibility_share": 0.05,
+     "low_visibility_exposure_share": 0.034063,
+     "pool_low_visibility_share": 0.04,
+     "ndkl": 0.035728,
+     "relevance_retained": 0.987675
+    },
+    "diagnostics": {
+     "candidates_retrieved": 100,
+     "quota_picks": 0,
+     "quota_shortfalls": 0,
+     "cap_relaxations": 0
+    },
+    "parameters": {
+     "top_k": 20,
+     "k_candidates": 100,
+     "alpha": 1.0,
+     "rerank": {
+      "lambda_": 0.8,
+      "max_per_institution": 3,
+      "min_protected_share": 0.2,
+      "relevance_floor": 0.5,
+      "fairness_mode": "prefix",
+      "fair_alpha": 0.1,
+      "query_institution_penalty": 1.0,
+      "temperature": 0.0,
+      "seed": null
+     }
+    }
+   },
+   "expected": {
+    "verdict": "deny",
+    "reason_codes": [
+     "UPSTREAM_INCONSISTENT"
+    ]
+   }
+  }
+ ]
+}

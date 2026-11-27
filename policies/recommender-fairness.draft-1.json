@@ -1,0 +1,12 @@
+{
+  "version": "reco-draft-2",
+  "lambda": 0.8,
+  "max_per_institution": 3,
+  "min_low_visibility_share": 0.2,
+  "relevance_floor": 0.5,
+  "mode": "prefix",
+  "baseline": "retain",
+  "protected_attribute": "low_visibility",
+  "unknown_institution": "UNKNOWN",
+  "require_rejection_justification": true
+}

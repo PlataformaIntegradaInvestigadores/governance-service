@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     database: Path | None = None
     database_url: SecretStr | None = Field(default=None, min_length=1)
     audit_checkpoint_path: Path | None = None
+    # `id:base64key[,id:base64key...]`, kept outside the repository and the store.
+    content_keys: SecretStr | None = Field(default=None, min_length=1)
+    content_retention_days: int = Field(default=30, ge=1, le=3650)
     # Pending cases expire, and are denied, after this window.
     review_window_minutes: int = Field(default=1440, ge=1, le=10080)
     qa_upstream_base_url: AnyHttpUrl | None = None
@@ -65,6 +68,8 @@ class Settings(BaseSettings):
             )
         if self.database is not None and self.database_url is not None:
             raise ValueError("Configure either a SQLite database or PostgreSQL")
+        if self.content_retention_days * 1440 <= self.review_window_minutes:
+            raise ValueError("Content retention must outlast the review window")
         if self.qa_upstream_base_url is not None and (
             not self.has_store or self.qa_release_key is None
         ):

@@ -24,6 +24,10 @@ class ReviewCaseNotFoundError(LookupError):
     pass
 
 
+class ProtectedContentUnavailableError(ReviewCaseNotFoundError):
+    """Retention removed the content; its digest and audit events remain."""
+
+
 class ReviewCaseExpiredError(Exception):
     """The review window closed; the output is denied and cannot be released."""
 

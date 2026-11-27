@@ -25,6 +25,7 @@ from app.infrastructure.admin_token_validator import (
     SearchAdminTokenValidator,
     create_admin_client,
 )
+from app.infrastructure.content_cipher import parse_content_keys
 from app.infrastructure.json_policy_repository import JsonPolicyRepository
 from app.infrastructure.postgres_store import (
     PostgresAssessmentRepository,
@@ -54,7 +55,13 @@ class Storage:
 def create_storage(settings: Settings) -> Storage | None:
     retain = settings.qa_retain_synthetic_deliveries
     if settings.database_url is not None:
-        database = PostgresDatabase(settings.database_url.get_secret_value())
+        if settings.content_keys is None:
+            raise ValueError("PostgreSQL storage requires content keys")
+        database = PostgresDatabase(
+            settings.database_url.get_secret_value(),
+            parse_content_keys(settings.content_keys.get_secret_value()),
+            timedelta(days=settings.content_retention_days),
+        )
         database.require_runtime_role()
         return Storage(
             PostgresAssessmentRepository(database),

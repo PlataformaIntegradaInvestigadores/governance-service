@@ -4,6 +4,7 @@ Set GOVERNANCE_TEST_POSTGRES_URL to a role that can create roles and schemas.
 Each test gets its own schema; the roles are created once per session.
 """
 
+import base64
 import json
 import os
 import secrets
@@ -33,6 +34,7 @@ from app.domain.qa import (
 )
 from app.domain.qa_sampling import QaSample, QaSampleNotFoundError, QaSamplingPolicy
 from app.domain.resolution import (
+    ProtectedContentUnavailableError,
     ReviewCaseAlreadyResolvedError,
     ReviewOutcome,
     ReviewResolution,
@@ -45,6 +47,10 @@ from app.domain.review import (
 )
 from app.domain.supervision import Supervisor
 from app.infrastructure import postgres_store
+from app.infrastructure.content_cipher import (
+    ContentKeyUnavailableError,
+    parse_content_keys,
+)
 from app.infrastructure.file_checkpoints import FileCheckpointRepository
 from app.infrastructure.postgres_migrations import (
     MIGRATIONS,
@@ -72,6 +78,10 @@ pytestmark = [
 
 _NOW = datetime(2026, 11, 27, 12, tzinfo=UTC)
 _POLICY = QaPolicy("qa", "1", 1)
+_KEY = base64.b64encode(bytes(range(32))).decode()
+_OTHER_KEY = base64.b64encode(bytes(range(32, 64))).decode()
+_KEYS = f"k1:{_KEY}"
+_CIPHER = parse_content_keys(_KEYS)
 _CONTENT = RetainedQaContent((RetainedQaPair("Synthetic q", "Synthetic a"),), ("7",))
 
 
@@ -156,7 +166,7 @@ class Store:
         self.migrator_url = server.url("migrator", schema)
         self.app_url = server.url("app", schema)
         self.audit_url = server.url("audit", schema)
-        self.database = PostgresDatabase(self.app_url)
+        self.database = self.reopen()
 
     def admin_execute(self, statement, params=()):
         with self.server.admin() as connection:
@@ -166,9 +176,19 @@ class Store:
             cursor = connection.execute(statement, params)
             return cursor.fetchall() if cursor.description else None
 
-    def reopen(self):
+    def reopen(self, cipher=_CIPHER, retention=timedelta(days=30)):
         """Fresh adapters on a fresh connection: nothing comes from memory."""
-        return PostgresDatabase(self.app_url)
+        return PostgresDatabase(self.app_url, cipher, retention)
+
+    def migrate(self, directory=MIGRATIONS):
+        applied = apply_migrations(self.migrator_url, directory)
+        # Same grant as centinela-ops after migrations: retention may delete.
+        self.admin_execute(
+            sql.SQL("GRANT DELETE ON protected_content TO {}").format(
+                sql.Identifier(self.server.roles["app"])
+            )
+        )
+        return applied
 
     def count(self, table):
         return self.admin_execute(
@@ -195,7 +215,7 @@ def empty_store(server):
 
 @pytest.fixture
 def store(empty_store):
-    apply_migrations(empty_store.migrator_url)
+    empty_store.migrate()
     return empty_store
 
 
@@ -224,7 +244,10 @@ def _save_suspended(database):
 
 
 def test_migrations_apply_once_and_are_recorded(empty_store):
-    assert apply_migrations(empty_store.migrator_url) == ("0001_audit_store",)
+    assert apply_migrations(empty_store.migrator_url) == (
+        "0001_audit_store",
+        "0002_protected_content",
+    )
     assert apply_migrations(empty_store.migrator_url) == ()
     with psycopg.connect(empty_store.app_url) as connection:
         require_current_schema(connection)
@@ -232,7 +255,8 @@ def test_migrations_apply_once_and_are_recorded(empty_store):
 
 def test_edited_applied_migration_is_refused(empty_store, tmp_path):
     apply_migrations(empty_store.migrator_url)
-    shutil.copy(MIGRATIONS / "0001_audit_store.sql", tmp_path)
+    for path in MIGRATIONS.glob("*.sql"):
+        shutil.copy(path, tmp_path)
     (tmp_path / "0001_audit_store.sql").write_text("-- edited\n", encoding="utf-8")
 
     with pytest.raises(MigrationError, match="were edited"):
@@ -264,8 +288,9 @@ def test_runtime_refuses_a_schema_without_migrations(empty_store):
 
 
 def test_runtime_refuses_a_schema_missing_migrations(store, tmp_path):
-    shutil.copy(MIGRATIONS / "0001_audit_store.sql", tmp_path)
-    (tmp_path / "0002_next.sql").write_text("SELECT 1;", encoding="utf-8")
+    for path in MIGRATIONS.glob("*.sql"):
+        shutil.copy(path, tmp_path)
+    (tmp_path / "0099_next.sql").write_text("SELECT 1;", encoding="utf-8")
 
     with (
         psycopg.connect(store.app_url) as connection,
@@ -434,19 +459,29 @@ def test_case_needs_a_suspended_assessment_in_the_database(store):
 
     with pytest.raises(errors.CheckViolation, match="suspended assessment"):
         store.admin_execute(
-            "INSERT INTO review_cases VALUES (%s, %s, now(), '{}', %s)",
+            "INSERT INTO review_cases VALUES (%s, %s, now(), %s)",
             (str(uuid4()), record.assessment_id, "a" * 64),
         )
 
 
-def test_tampered_case_content_is_detected(store):
+def test_tampered_case_digest_is_detected(store):
     record = _save_suspended(store.database)
     store.admin_execute("ALTER TABLE review_cases DISABLE TRIGGER USER")
-    store.admin_execute(
-        "UPDATE review_cases SET content_json = replace(content_json, 'a\"', 'b\"')"
-    )
+    store.admin_execute("UPDATE review_cases SET content_sha256 = repeat('0', 64)")
 
     with pytest.raises(ReviewCaseIntegrityError, match="digest mismatch"):
+        PostgresReviewCaseRepository(store.database).get(record.review_case_id)
+
+
+def test_tampered_ciphertext_fails_authentication(store):
+    record = _save_suspended(store.database)
+    store.admin_execute("ALTER TABLE protected_content DISABLE TRIGGER USER")
+    store.admin_execute(
+        "UPDATE protected_content SET ciphertext = "
+        "set_byte(ciphertext, 0, mod(get_byte(ciphertext, 0) + 1, 256))"
+    )
+
+    with pytest.raises(ReviewCaseIntegrityError, match="failed authentication"):
         PostgresReviewCaseRepository(store.database).get(record.review_case_id)
 
 
@@ -532,8 +567,7 @@ def test_tampered_resolution_content_is_detected(store):
     PostgresReviewResolutionRepository(store.database).save(_resolution(record))
     store.admin_execute("ALTER TABLE review_resolutions DISABLE TRIGGER USER")
     store.admin_execute(
-        "UPDATE review_resolutions SET modified_content_json = "
-        "replace(modified_content_json, '7', '8')"
+        "UPDATE review_resolutions SET modified_content_sha256 = repeat('0', 64)"
     )
 
     with pytest.raises(ReviewCaseIntegrityError, match="digest mismatch"):
@@ -595,10 +629,10 @@ def test_retained_delivery_is_readable_and_sampled(store):
 
 def test_tampered_delivery_content_is_detected(store):
     deliveries, identifiers = _delivered(store, 1)
-    store.admin_execute("ALTER TABLE qa_delivery_content DISABLE TRIGGER USER")
-    store.admin_execute("UPDATE qa_delivery_content SET response_body = '\\x7b7d'")
+    store.admin_execute("ALTER TABLE qa_deliveries DISABLE TRIGGER USER")
+    store.admin_execute("UPDATE qa_deliveries SET response_sha256 = repeat('0', 64)")
 
-    with pytest.raises(ReviewCaseIntegrityError, match="integrity check"):
+    with pytest.raises(ReviewCaseIntegrityError, match="digest mismatch"):
         deliveries.review_content(identifiers[0])
 
 
@@ -666,7 +700,7 @@ def test_missing_sample_is_reported(store):
 def test_chain_verifies_and_detects_tampering_by_a_superuser(store):
     for _ in range(3):
         _save_suspended(store.database)
-    events = PostgresAuditEventRepository(PostgresDatabase(store.audit_url))
+    events = PostgresAuditEventRepository(PostgresDatabase(store.audit_url, _CIPHER))
     assert verify_chain(events.events()).valid
     store.admin_execute("ALTER TABLE audit_events DISABLE TRIGGER USER")
     store.admin_execute(
@@ -711,7 +745,7 @@ def test_concurrent_writers_keep_one_linear_chain(store):
     def write():
         try:
             for _ in range(5):
-                _save_suspended(PostgresDatabase(store.app_url))
+                _save_suspended(store.reopen())
         except psycopg.Error as error:  # pragma: no cover - reported below
             errors_seen.append(error)
 
@@ -758,6 +792,7 @@ def _settings(store, tmp_path, **overrides):
         "qa_upstream_base_url": "http://search.test",
         "qa_policy_path": policy,
         "qa_release_key": "synthetic-test-material-of-at-least-32-bytes",
+        "content_keys": _KEYS,
     }
     return Settings(**(values | overrides))
 
@@ -814,7 +849,7 @@ def test_governed_qa_is_denied_when_postgres_fails(store, tmp_path, respx_mock):
         }
     )
     application.state.qa_assessor._assessments._database = PostgresDatabase(
-        make_conninfo(store.app_url, dbname="governance_missing")
+        make_conninfo(store.app_url, dbname="governance_missing"), _CIPHER
     )
 
     response = TestClient(application).post(
@@ -841,7 +876,9 @@ def test_cli_migrates_verifies_and_checkpoints(
     url = empty_store.migrator_url
 
     assert _run_cli(monkeypatch, url, None, "migrate") == 0
-    assert json.loads(capsys.readouterr().out) == {"applied": ["0001_audit_store"]}
+    assert json.loads(capsys.readouterr().out) == {
+        "applied": ["0001_audit_store", "0002_protected_content"]
+    }
     _save_suspended(empty_store.database)
     audit = empty_store.audit_url
     assert _run_cli(monkeypatch, audit, checkpoints, "checkpoint-audit") == 0
@@ -868,3 +905,249 @@ def test_cli_reports_missing_configuration(store, monkeypatch, capsys):
 
     assert _run_cli(monkeypatch, store.audit_url, None, "verify-audit") == 2
     assert "GOVERNANCE_AUDIT_CHECKPOINT_PATH" in capsys.readouterr().out
+
+
+# Encryption at rest and retention (AB#321)
+
+
+def _all_text(store):
+    """Every text and bytea value in the schema, as one string."""
+    rows = store.admin_execute(
+        "SELECT table_name, column_name FROM information_schema.columns "
+        "WHERE table_schema = %s AND data_type IN ('text', 'bytea', 'character')",
+        (store.schema,),
+    )
+    values = []
+    for table, column in rows:
+        query = sql.SQL("SELECT {}::text FROM {}").format(
+            sql.Identifier(column), sql.Identifier(table)
+        )
+        values += [value for (value,) in store.admin_execute(query) if value]
+    return "\n".join(values)
+
+
+def test_protected_content_is_encrypted_at_rest(store):
+    record = _save_suspended(store.database)
+    resolution = _resolution(record)
+    PostgresReviewResolutionRepository(store.database).save(resolution)
+
+    stored = _all_text(store)
+
+    assert "Synthetic a" not in stored
+    assert "Synthetic reason" not in stored
+    assert "53796e7468657469632061" not in stored  # hex of "Synthetic a"
+    assert store.count("protected_content") == 3
+    assert PostgresReviewCaseRepository(store.reopen()).get(
+        record.review_case_id
+    ) == _case(record)
+
+
+def test_reading_without_the_key_is_refused(store):
+    record = _save_suspended(store.database)
+    other = parse_content_keys(f"k2:{_OTHER_KEY}")
+
+    with pytest.raises(ContentKeyUnavailableError, match="k1"):
+        PostgresReviewCaseRepository(store.reopen(other)).get(record.review_case_id)
+    with pytest.raises(ContentKeyUnavailableError, match="No content key"):
+        PostgresReviewCaseRepository(store.reopen(None)).get(record.review_case_id)
+
+
+def test_a_different_key_with_the_same_id_fails_authentication(store):
+    record = _save_suspended(store.database)
+    impostor = parse_content_keys(f"k1:{_OTHER_KEY}")
+
+    with pytest.raises(ReviewCaseIntegrityError, match="failed authentication"):
+        PostgresReviewCaseRepository(store.reopen(impostor)).get(record.review_case_id)
+
+
+def test_writing_without_a_key_stores_nothing(store):
+    record = _record()
+
+    with pytest.raises(ContentKeyUnavailableError):
+        PostgresAssessmentRepository(store.reopen(None)).save(record, _case(record))
+
+    assert [store.count(t) for t in ("assessments", "audit_events")] == [0, 0]
+
+
+def test_swapped_ciphertexts_fail_authentication(store):
+    first = _save_suspended(store.database)
+    _save_suspended(store.database)
+    store.admin_execute("ALTER TABLE protected_content DISABLE TRIGGER USER")
+    store.admin_execute(
+        "UPDATE protected_content SET (nonce, ciphertext) = "
+        "(SELECT nonce, ciphertext FROM protected_content o "
+        " WHERE o.content_id <> protected_content.content_id)"
+    )
+
+    with pytest.raises(ReviewCaseIntegrityError, match="failed authentication"):
+        PostgresReviewCaseRepository(store.database).get(first.review_case_id)
+
+
+def test_rotated_keys_open_old_content_and_seal_with_the_new_one(store):
+    old = _save_suspended(store.database)
+    rotated = store.reopen(parse_content_keys(f"k2:{_OTHER_KEY},{_KEYS}"))
+    new = _save_suspended(rotated)
+
+    cases = PostgresReviewCaseRepository(rotated)
+
+    assert cases.get(old.review_case_id) == _case(old)
+    assert cases.get(new.review_case_id) == _case(new)
+    assert sorted(store.admin_execute("SELECT key_id FROM protected_content")) == [
+        ("k1",),
+        ("k2",),
+    ]
+
+
+def test_expired_content_is_purged_with_an_event_and_the_chain_holds(store):
+    expired = store.reopen(retention=timedelta(0))
+    record = _save_suspended(expired)
+    PostgresReviewResolutionRepository(expired).save(_resolution(record))
+    kept = _save_suspended(store.database)
+    digest = store.admin_execute(
+        "SELECT content_sha256 FROM review_cases WHERE case_id = %s",
+        (record.review_case_id,),
+    )[0][0]
+
+    purged = store.database.purge_expired()
+
+    assert len(purged) == 3
+    assert f"review_case:{record.review_case_id}" in purged
+    events = [e for e in store.events() if e["type"] == "protected_content.purged"]
+    assert {e["data"]["content_id"] for e in events} == set(purged)
+    assert digest in {e["data"]["sha256"] for e in events}
+    assert all(e["data"]["expires_at"] <= e["recorded_at"] for e in events)
+    assert verify_chain(PostgresAuditEventRepository(store.reopen()).events()).valid
+    reopened = store.reopen()
+    assert PostgresAssessmentRepository(reopened).get(record.assessment_id) == record
+    with pytest.raises(ProtectedContentUnavailableError, match="retention"):
+        PostgresReviewCaseRepository(reopened).get(record.review_case_id)
+    with pytest.raises(ProtectedContentUnavailableError):
+        PostgresReviewResolutionRepository(reopened).get(record.review_case_id)
+    assert PostgresReviewCaseRepository(reopened).get(kept.review_case_id)
+    assert store.count("review_cases") == 2
+    assert store.database.purge_expired() == ()
+
+
+def test_unexpired_content_cannot_be_deleted_or_rewritten(store):
+    _save_suspended(store.database)
+
+    assert store.database.purge_expired() == ()
+    with (
+        psycopg.connect(store.app_url) as connection,
+        pytest.raises(errors.InsufficientPrivilege, match="retention period"),
+    ):
+        connection.execute("DELETE FROM protected_content")
+    for statement in (
+        "UPDATE protected_content SET key_id = key_id",
+        "TRUNCATE protected_content",
+    ):
+        with (
+            psycopg.connect(store.app_url) as connection,
+            pytest.raises(errors.InsufficientPrivilege, match="permission denied"),
+        ):
+            connection.execute(statement)
+    with (
+        psycopg.connect(store.migrator_url) as connection,
+        pytest.raises(errors.InsufficientPrivilege, match="append-only"),
+    ):
+        connection.execute("UPDATE protected_content SET key_id = key_id")
+    assert store.count("protected_content") == 1
+
+
+def test_role_that_can_rewrite_protected_content_is_refused(store):
+    store.admin_execute(
+        sql.SQL("GRANT UPDATE ON protected_content TO {}").format(
+            sql.Identifier(store.server.roles["app"])
+        )
+    )
+
+    with pytest.raises(InsecureDatabaseRoleError, match="protected_content"):
+        store.database.require_runtime_role()
+
+
+def test_retained_delivery_and_sample_decision_are_sealed(store):
+    deliveries, identifiers = _delivered(store, 1)
+    sample = _sample(identifiers)
+    deliveries.save(sample)
+    decision = {"outcome": "correct", "justification": "Synthetic reason"}
+
+    deliveries.save_review(sample.sample_id, identifiers[0], decision)
+
+    assert deliveries.review_content(identifiers[0]) == {"qa_pairs": []}
+    assert "Synthetic reason" not in _all_text(store)
+    assert store.count("protected_content") == 2
+
+
+def test_purged_delivery_content_is_reported_as_expired(store):
+    record = _record(Verdict.ALLOW)
+    PostgresAssessmentRepository(store.database).save(record, None)
+    expired = store.reopen(retention=timedelta(0))
+    PostgresQaDeliveryRepository(expired, retain_content=True).record(
+        record.assessment_id, b"{}"
+    )
+    store.database.purge_expired()
+
+    with pytest.raises(ProtectedContentUnavailableError):
+        PostgresQaDeliveryRepository(store.database).review_content(
+            record.assessment_id
+        )
+
+
+def test_migration_refuses_existing_clear_text_content(empty_store, tmp_path):
+    shutil.copy(MIGRATIONS / "0001_audit_store.sql", tmp_path)
+    apply_migrations(empty_store.migrator_url, tmp_path)
+    digest = "a" * 64
+    empty_store.admin_execute(
+        "INSERT INTO policies VALUES ('qa', '1', '{}', %s)", (digest,)
+    )
+    empty_store.admin_execute(
+        "INSERT INTO assessments VALUES ('a1', now(), 'qa', '1', 'suspend', '[]')"
+    )
+    empty_store.admin_execute(
+        "INSERT INTO review_cases VALUES ('c1', 'a1', now(), '{}', %s)", (digest,)
+    )
+
+    with pytest.raises(errors.RaiseException, match="Clear-text protected content"):
+        apply_migrations(empty_store.migrator_url)
+
+    assert empty_store.admin_execute("SELECT version FROM schema_migrations") == [
+        ("0001_audit_store",)
+    ]
+
+
+def test_settings_require_keys_and_a_retention_longer_than_review(store, tmp_path):
+    with pytest.raises(ValueError, match="requires content keys"):
+        create_storage(_settings(store, tmp_path, content_keys=None))
+    with pytest.raises(ValidationError, match="outlast the review window"):
+        _settings(store, tmp_path, content_retention_days=1, review_window_minutes=1440)
+
+
+def test_poll_after_retention_is_denied_over_http(store, tmp_path, respx_mock):
+    client = TestClient(create_app(_settings(store, tmp_path)))
+    respx_mock.post("http://search.test/api-se/v1/llm-search/generate-qa/").respond(
+        json={
+            "status": "success",
+            "qa_pairs": [{"question": "Synthetic q", "answer": "Synthetic a"}],
+            "source_docs": [{"article_id": 1}],
+        }
+    )
+    review = client.post("/api/v1/governed/qa/generate", json={"query": "q"}).json()
+    store.admin_execute(
+        "ALTER TABLE protected_content DISABLE TRIGGER protected_content_purge_expired"
+    )
+    store.admin_execute("DELETE FROM protected_content")
+
+    response = client.get(
+        f"/api/v1/governed/qa/reviews/{review['review_id']}",
+        headers={"Authorization": f"Bearer {review['review_token']}"},
+    )
+
+    assert response.status_code == 403
+    assert "Synthetic a" not in response.text
+
+
+def test_cli_purges_expired_content(store, monkeypatch, capsys):
+    _save_suspended(store.reopen(retention=timedelta(0)))
+
+    assert _run_cli(monkeypatch, store.app_url, None, "purge-expired") == 0
+    assert json.loads(capsys.readouterr().out) == {"purged": 1}

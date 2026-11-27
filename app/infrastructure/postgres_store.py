@@ -3,7 +3,7 @@ import json
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import asdict
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 import psycopg
@@ -20,6 +20,7 @@ from app.domain.qa import (
 )
 from app.domain.qa_sampling import QaSample, QaSampleNotFoundError, QaSamplingPolicy
 from app.domain.resolution import (
+    ProtectedContentUnavailableError,
     ReviewCaseAlreadyResolvedError,
     ReviewOutcome,
     ReviewResolution,
@@ -30,6 +31,11 @@ from app.domain.review import (
     require_review_case_link,
 )
 from app.domain.supervision import Supervisor
+from app.infrastructure.content_cipher import (
+    ContentCipher,
+    ContentKeyUnavailableError,
+    SealedContent,
+)
 from app.infrastructure.postgres_migrations import require_current_schema
 from app.infrastructure.sqlite_assessment_repository import (
     _content_json,
@@ -49,6 +55,8 @@ APPEND_ONLY_TABLES = (
     "qa_sample_reviews",
     "audit_events",
 )
+# Retention may delete expired rows here; nothing may update or truncate them.
+PURGEABLE_TABLE = "protected_content"
 
 
 class InsecureDatabaseRoleError(Exception):
@@ -94,8 +102,15 @@ class _AuditTrail:
 class PostgresDatabase:
     """Connection settings plus the checks the runtime makes before serving."""
 
-    def __init__(self, conninfo: str) -> None:
+    def __init__(
+        self,
+        conninfo: str,
+        cipher: ContentCipher | None = None,
+        retention: timedelta = timedelta(days=30),
+    ) -> None:
         self._conninfo = conninfo
+        self._cipher = cipher
+        self._retention = retention
 
     def connect(self) -> psycopg.Connection:
         return psycopg.connect(self._conninfo)
@@ -106,13 +121,76 @@ class PostgresDatabase:
             (writable,) = connection.execute(
                 "SELECT coalesce(array_agg(name ORDER BY name), '{}') "
                 "FROM unnest(%s::text[]) AS name WHERE has_table_privilege("
-                "current_user, name, 'UPDATE, DELETE, TRUNCATE')",
-                (list(APPEND_ONLY_TABLES),),
+                "current_user, name, CASE WHEN name = %s THEN 'UPDATE, TRUNCATE' "
+                "ELSE 'UPDATE, DELETE, TRUNCATE' END)",
+                ([*APPEND_ONLY_TABLES, PURGEABLE_TABLE], PURGEABLE_TABLE),
             ).fetchone()
         if writable:
             raise InsecureDatabaseRoleError(
                 f"Runtime role can modify append-only tables: {writable}"
             )
+
+    def _require_cipher(self) -> ContentCipher:
+        if self._cipher is None:
+            raise ContentKeyUnavailableError("No content key is configured")
+        return self._cipher
+
+    def seal(
+        self, connection: psycopg.Connection, content_id: str, plaintext: bytes
+    ) -> str:
+        """Store encrypted content with its retention deadline; return its SHA-256."""
+        sealed = self._require_cipher().seal(content_id, plaintext)
+        digest = hashlib.sha256(plaintext).hexdigest()
+        created_at = datetime.now(UTC)
+        connection.execute(
+            "INSERT INTO protected_content VALUES (%s, %s, %s, %s, %s, %s, %s)",
+            (
+                content_id,
+                sealed.key_id,
+                sealed.nonce,
+                sealed.ciphertext,
+                digest,
+                created_at,
+                created_at + self._retention,
+            ),
+        )
+        return digest
+
+    def open_content(
+        self, connection: psycopg.Connection, content_id: str, digest: str
+    ) -> bytes:
+        """Decrypt and check against the digest kept in the audited record."""
+        row = connection.execute(
+            "SELECT key_id, nonce, ciphertext FROM protected_content "
+            "WHERE content_id = %s",
+            (content_id,),
+        ).fetchone()
+        if row is None:
+            raise ProtectedContentUnavailableError("Content removed by retention")
+        sealed = SealedContent(row[0], bytes(row[1]), bytes(row[2]))
+        plaintext = self._require_cipher().open(content_id, sealed)
+        if hashlib.sha256(plaintext).hexdigest() != digest:
+            raise ReviewCaseIntegrityError("Protected content digest mismatch")
+        return plaintext
+
+    def purge_expired(self) -> tuple[str, ...]:
+        """Delete content past its deadline; each removal leaves an audit event."""
+        with self.audited() as trail:
+            rows = trail.connection.execute(
+                "DELETE FROM protected_content WHERE expires_at <= now() "
+                "RETURNING content_id, sha256, created_at, expires_at"
+            ).fetchall()
+            for content_id, digest, created_at, expires_at in sorted(rows):
+                trail.append(
+                    "protected_content.purged",
+                    {
+                        "content_id": content_id,
+                        "sha256": digest,
+                        "created_at": _utc(created_at).isoformat(),
+                        "expires_at": _utc(expires_at).isoformat(),
+                    },
+                )
+        return tuple(sorted(row[0] for row in rows))
 
     @contextmanager
     def audited(self) -> Iterator[_AuditTrail]:
@@ -197,17 +275,19 @@ class PostgresAssessmentRepository:
             if review_case is not None:
                 self._open_case(trail, review_case)
 
-    @staticmethod
-    def _open_case(trail: _AuditTrail, review_case: ReviewCase) -> None:
-        content = _content_json(review_case.content)
-        content_digest = _sha256(content)
+    def _open_case(self, trail: _AuditTrail, review_case: ReviewCase) -> None:
+        content_digest = self._database.seal(
+            trail.connection,
+            f"review_case:{review_case.case_id}",
+            _content_json(review_case.content).encode("utf-8"),
+        )
         trail.connection.execute(
-            "INSERT INTO review_cases VALUES (%s, %s, %s, %s, %s)",
+            "INSERT INTO review_cases (case_id, assessment_id, created_at, "
+            "content_sha256) VALUES (%s, %s, %s, %s)",
             (
                 review_case.case_id,
                 review_case.assessment_id,
                 review_case.created_at,
-                content,
                 content_digest,
             ),
         )
@@ -253,7 +333,7 @@ class PostgresAssessmentRepository:
 class PostgresReviewCaseRepository:
     """Protected in-process reads of retained content, separate from audit queries.
 
-    shortcut: content is stored in clear until AB#321 adds encryption at rest.
+    Content is encrypted at rest and removed when its retention period ends.
     """
 
     def __init__(self, database: PostgresDatabase) -> None:
@@ -262,22 +342,30 @@ class PostgresReviewCaseRepository:
     def get(self, case_id: str) -> ReviewCase | None:
         with self._database.connect() as connection:
             row = connection.execute(
-                "SELECT case_id, assessment_id, created_at, content_json, "
-                "content_sha256 FROM review_cases WHERE case_id = %s",
+                "SELECT case_id, assessment_id, created_at, content_sha256 "
+                "FROM review_cases WHERE case_id = %s",
                 (case_id,),
             ).fetchone()
-        if row is None:
-            return None
-        case_id, assessment_id, created_at, content, digest = row
-        if _sha256(content) != digest:
-            raise ReviewCaseIntegrityError("Stored review case digest mismatch")
+            if row is None:
+                return None
+            case_id, assessment_id, created_at, digest = row
+            content = self._database.open_content(
+                connection, f"review_case:{case_id}", digest
+            )
         return ReviewCase(
-            case_id, assessment_id, _utc(created_at), _read_content(content)
+            case_id,
+            assessment_id,
+            _utc(created_at),
+            _read_content(content.decode("utf-8")),
         )
 
 
 def _optional_sha256(text: str | None) -> str | None:
     return _sha256(text) if text is not None else None
+
+
+def _resolution_content_id(resolution_id: str, part: str) -> str:
+    return f"review_resolution:{resolution_id}:{part}"
 
 
 class PostgresReviewResolutionRepository:
@@ -293,11 +381,18 @@ class PostgresReviewResolutionRepository:
             if resolution.modified_content is not None
             else None
         )
+        protected = {
+            "justification": resolution.justification,
+            "modified": content,
+        }
         try:
             with self._database.audited() as trail:
                 trail.connection.execute(
-                    "INSERT INTO review_resolutions VALUES "
-                    "(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                    "INSERT INTO review_resolutions (resolution_id, case_id, outcome, "
+                    "resolved_at, expires_at, supervisor_identity_id, "
+                    "supervisor_snapshot_json, justification_sha256, "
+                    "modified_content_sha256) "
+                    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
                     (
                         resolution.resolution_id,
                         resolution.case_id,
@@ -310,11 +405,17 @@ class PostgresReviewResolutionRepository:
                             if supervisor
                             else None
                         ),
-                        resolution.justification,
-                        content,
+                        _optional_sha256(resolution.justification),
                         _optional_sha256(content),
                     ),
                 )
+                for part, text in protected.items():
+                    if text is not None:
+                        self._database.seal(
+                            trail.connection,
+                            _resolution_content_id(resolution.resolution_id, part),
+                            text.encode("utf-8"),
+                        )
                 trail.append(
                     "review.resolved",
                     {
@@ -341,17 +442,22 @@ class PostgresReviewResolutionRepository:
         with self._database.connect() as connection:
             row = connection.execute(
                 "SELECT resolution_id, case_id, outcome, resolved_at, expires_at, "
-                "supervisor_identity_id, supervisor_snapshot_json, justification, "
-                "modified_content_json, modified_content_sha256 "
+                "supervisor_identity_id, supervisor_snapshot_json, "
+                "justification_sha256, modified_content_sha256 "
                 "FROM review_resolutions WHERE case_id = %s",
                 (case_id,),
             ).fetchone()
-        if row is None:
-            return None
-        identifier, case, outcome, resolved_at, expires_at = row[:5]
-        identity_id, snapshot, justification, content, digest = row[5:]
-        if content is not None and _sha256(content) != digest:
-            raise ReviewCaseIntegrityError("Stored resolution digest mismatch")
+            if row is None:
+                return None
+            identifier, case, outcome, resolved_at, expires_at = row[:5]
+            identity_id, snapshot, justification_digest, content_digest = row[5:]
+            justification, content = (
+                self._open(connection, identifier, part, digest)
+                for part, digest in (
+                    ("justification", justification_digest),
+                    ("modified", content_digest),
+                )
+            )
         supervisor = (
             Supervisor(identity_id, json.loads(snapshot)["display_name"])
             if identity_id is not None
@@ -366,6 +472,20 @@ class PostgresReviewResolutionRepository:
             supervisor,
             justification,
             _read_content(content) if content is not None else None,
+        )
+
+    def _open(
+        self,
+        connection: psycopg.Connection,
+        resolution_id: str,
+        part: str,
+        digest: str | None,
+    ) -> str | None:
+        if digest is None:
+            return None
+        content_id = _resolution_content_id(resolution_id, part)
+        return self._database.open_content(connection, content_id, digest).decode(
+            "utf-8"
         )
 
     def pending_case_ids(self, created_before: datetime) -> tuple[str, ...]:
@@ -400,8 +520,10 @@ class PostgresQaDeliveryRepository:
                 return
             if self._retain_content:
                 trail.connection.execute(
-                    "INSERT INTO qa_delivery_content VALUES (%s, %s)",
-                    (assessment_id, response_body),
+                    "INSERT INTO qa_delivery_content VALUES (%s)", (assessment_id,)
+                )
+                self._database.seal(
+                    trail.connection, f"qa_delivery:{assessment_id}", response_body
                 )
             trail.append(
                 "qa.delivery.prepared",
@@ -416,33 +538,46 @@ class PostgresQaDeliveryRepository:
     def review_content(self, assessment_id: str) -> dict:
         with self._database.connect() as connection:
             row = connection.execute(
-                "SELECT response_body, response_sha256 FROM qa_delivery_content "
+                "SELECT response_sha256 FROM qa_delivery_content "
                 "JOIN qa_deliveries USING (assessment_id) WHERE assessment_id = %s",
                 (assessment_id,),
             ).fetchone()
-        if row is None:
-            raise QaSampleNotFoundError
-        body = bytes(row[0])
-        if hashlib.sha256(body).hexdigest() != row[1]:
-            raise ReviewCaseIntegrityError("Delivery content integrity check failed")
+            if row is None:
+                raise QaSampleNotFoundError
+            body = self._database.open_content(
+                connection, f"qa_delivery:{assessment_id}", row[0]
+            )
         return json.loads(body)
 
     def save_review(self, sample_id: UUID, assessment_id: str, decision: dict) -> dict:
         document = json.dumps(decision, sort_keys=True)
+        digest = _sha256(document)
         with self._database.audited() as trail:
             inserted = trail.connection.execute(
-                "INSERT INTO qa_sample_reviews VALUES (%s, %s, %s, %s) "
+                "INSERT INTO qa_sample_reviews (sample_id, assessment_id, "
+                "resolved_at, outcome, decision_sha256) VALUES (%s, %s, %s, %s, %s) "
                 "ON CONFLICT (sample_id, assessment_id) DO NOTHING",
-                (str(sample_id), assessment_id, document, datetime.now(UTC)),
+                (
+                    str(sample_id),
+                    assessment_id,
+                    datetime.now(UTC),
+                    str(decision.get("outcome")),
+                    digest,
+                ),
             ).rowcount
             saved, resolved_at = trail.connection.execute(
-                "SELECT decision_json, resolved_at FROM qa_sample_reviews "
+                "SELECT decision_sha256, resolved_at FROM qa_sample_reviews "
                 "WHERE sample_id = %s AND assessment_id = %s",
                 (str(sample_id), assessment_id),
             ).fetchone()
-            if saved != document:
+            if saved != digest:
                 raise ReviewCaseAlreadyResolvedError
             if inserted:
+                self._database.seal(
+                    trail.connection,
+                    f"qa_sample_review:{sample_id}:{assessment_id}",
+                    document.encode("utf-8"),
+                )
                 trail.append(
                     "qa.sample.reviewed",
                     {
@@ -452,7 +587,7 @@ class PostgresQaDeliveryRepository:
                         "supervisor_identity_id": decision.get(
                             "supervisor_identity_id"
                         ),
-                        "decision_sha256": _sha256(document),
+                        "decision_sha256": digest,
                         "resolved_at": _utc(resolved_at).isoformat(),
                     },
                 )

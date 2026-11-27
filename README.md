@@ -221,8 +221,29 @@ With the read-only audit role and `GOVERNANCE_AUDIT_CHECKPOINT_PATH`:
   that reveals a rewritten or truncated chain.
 
 Limits: a superuser can still disable triggers; the chain makes that visible
-only up to the last checkpoint. Retained content is stored in clear until
-AB#321. See [ADR 0008](docs/adr/0008-postgresql-audit-store-with-hash-chain.md).
+only up to the last checkpoint. See
+[ADR 0008](docs/adr/0008-postgresql-audit-store-with-hash-chain.md).
+
+### Encrypted content and retention
+
+PostgreSQL keeps retained content (review cases, justifications, modified
+content, retained deliveries and sample decisions) only in `protected_content`,
+encrypted with AES-256-GCM. Audited records keep the SHA-256 alone.
+
+- `GOVERNANCE_CONTENT_KEYS`: `id:base64key[,id:base64key...]` with 32-byte
+  keys, from the deployment secrets. Required with `GOVERNANCE_DATABASE_URL`.
+  The first key encrypts; all listed keys decrypt, so a rotated key stays
+  listed until its content expires.
+- `GOVERNANCE_CONTENT_RETENTION_DAYS` (default 30) must outlast the review
+  window.
+- `python -m app.cli purge-expired`, with the runtime role, deletes expired
+  content and records a `protected_content.purged` event for each row. Polls
+  of a purged case are denied (403); other routes answer 410 `CONTENT_EXPIRED`.
+
+The runtime role may delete only expired rows of `protected_content`; a
+trigger enforces the deadline. Losing the keys makes the content unreadable,
+not the audit records. The SQLite prototype stores content in clear. See
+[ADR 0009](docs/adr/0009-encrypted-protected-content-with-retention.md).
 
 ## Run locally
 
@@ -303,8 +324,8 @@ The local Q&A assessment advances AB#230/231 (policy evaluation and tests).
 Local policy loading and decision snapshots provide partial groundwork for
 AB#217/218/236/237. The PostgreSQL store, roles, hash chain and its
 verification implement AB#258/259/260 (ADR 0008); the YAML task is pending.
-Protected review cases advance AB#240/241; the PostgreSQL repository stores
-them in clear until AB#321 adds encryption and retention.
+Protected review cases advance AB#240/241; in PostgreSQL they are encrypted
+and purged after retention (AB#321, ADR 0009).
 Administrator token verification implements AB#248 locally.
 Review resolutions and expiry advance AB#244/245 and the case view advances
 AB#242. Next: release through the PEP and the 202 response, the agreed audit

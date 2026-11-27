@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse
 from app.domain.qa_sampling import InsufficientDeliveriesError, QaSampleNotFoundError
 from app.domain.resolution import (
     JustificationRequiredError,
+    ProtectedContentUnavailableError,
     ReviewCaseAlreadyResolvedError,
     ReviewCaseExpiredError,
     ReviewCaseNotFoundError,
@@ -26,6 +27,7 @@ _ERRORS: dict[type[Exception], tuple[int, str]] = {
     ReviewCaseNotFoundError: (404, "CASE_NOT_FOUND"),
     QaSampleNotFoundError: (404, "QA_SAMPLE_NOT_FOUND"),
     InsufficientDeliveriesError: (409, "INSUFFICIENT_QA_DELIVERIES"),
+    ProtectedContentUnavailableError: (410, "CONTENT_EXPIRED"),
     ReviewCaseAlreadyResolvedError: (409, "CASE_ALREADY_RESOLVED"),
     ReviewCaseExpiredError: (409, "CASE_EXPIRED"),
     JustificationRequiredError: (422, "JUSTIFICATION_REQUIRED"),

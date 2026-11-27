@@ -3,6 +3,7 @@
     python -m app.cli migrate            # migrator role
     python -m app.cli verify-audit       # audit (read-only) role
     python -m app.cli checkpoint-audit   # audit role; file outside the database
+    python -m app.cli purge-expired      # runtime role; removes expired content
 
 GOVERNANCE_DATABASE_URL selects the role; GOVERNANCE_AUDIT_CHECKPOINT_PATH the
 checkpoint file. Exit codes: 0 valid, 1 broken chain, 2 configuration error.
@@ -38,7 +39,8 @@ def _report(report: ChainReport) -> int:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m app.cli")
     parser.add_argument(
-        "command", choices=("migrate", "verify-audit", "checkpoint-audit")
+        "command",
+        choices=("migrate", "verify-audit", "checkpoint-audit", "purge-expired"),
     )
     command = parser.parse_args(argv).command
     settings = Settings()
@@ -48,6 +50,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     conninfo = settings.database_url.get_secret_value()
     if command == "migrate":
         _write({"applied": list(apply_migrations(conninfo))})
+        return 0
+    if command == "purge-expired":
+        purged = PostgresDatabase(conninfo).purge_expired()
+        _write({"purged": len(purged)})
         return 0
     if settings.audit_checkpoint_path is None:
         _write({"error": "GOVERNANCE_AUDIT_CHECKPOINT_PATH is not set"})

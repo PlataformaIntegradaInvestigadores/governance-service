@@ -169,8 +169,9 @@ autoriza. Ver [ADR 0005](docs/adr/0005-supervision-through-admin-token.md).
 
 Reglas de resolución (`approve`, `modify` o `reject`):
 
-- Modificar exige justificación (máx. 2000 caracteres). Aprobar también la
-  exige si la salida tiene `PARTIAL_GENERATION` o `SOURCE_EVIDENCE_INCOMPLETE`.
+- Rechazar o modificar exige una justificación (máx. 2000 caracteres). Aprobar
+  también la exige si la salida tiene `PARTIAL_GENERATION` o
+  `SOURCE_EVIDENCE_INCOMPLETE`.
 - Un caso tiene una sola resolución final. Otro resultado u otro supervisor
   recibe 409 `CASE_ALREADY_RESOLVED`.
 - El caso vence tras `REVIEW_WINDOW_MINUTES`. Una resolución tardía registra el

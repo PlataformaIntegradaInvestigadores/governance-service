@@ -21,7 +21,8 @@ class Settings(BaseSettings):
     review_window_minutes: int = Field(default=1440, ge=1, le=10080)
     qa_upstream_base_url: AnyHttpUrl | None = None
     qa_timeout_seconds: float = Field(default=30.0, gt=0, le=120)
-    qa_policy_path: Path = Path("policies/search-qa-review.draft-1.json")
+    qa_policy_path: Path = Path("policies/search-qa-review.draft-1.yaml")
+    qa_sampling_policy_path: Path = Path("policies/qa-retrospective-sampling.v1.yaml")
     qa_retain_synthetic_deliveries: bool = False
     qa_release_key: SecretStr | None = Field(default=None, min_length=32)
 

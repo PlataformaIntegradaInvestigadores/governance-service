@@ -1,6 +1,4 @@
-import json
 import sqlite3
-from pathlib import Path
 from typing import Annotated, Literal, Self
 from uuid import UUID
 
@@ -22,10 +20,10 @@ from app.domain.qa_sampling import (
     InsufficientDeliveriesError,
     QaSample,
     QaSampleNotFoundError,
-    QaSamplingPolicy,
 )
 from app.domain.resolution import MAX_JUSTIFICATION_LENGTH, JustificationRequiredError
 from app.domain.supervision import Supervisor
+from app.infrastructure.policy_files import load_qa_sampling_policy
 from app.infrastructure.sqlite_assessment_repository import SqliteQaDeliveryRepository
 
 router = APIRouter(
@@ -82,10 +80,9 @@ def create_sample(
 ) -> QaSample:
     repository = _repository(request)
     try:
-        document = Path("policies/qa-retrospective-sampling.v1.json").read_text(
-            encoding="utf-8"
+        policy = load_qa_sampling_policy(
+            request.app.state.settings.qa_sampling_policy_path
         )
-        policy = QaSamplingPolicy(**json.loads(document))
         sample = SampleQaDeliveries(repository, policy).execute(
             body.start, body.end, body.seed
         )

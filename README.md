@@ -60,6 +60,12 @@ body.
 
 ## Versioned local assessments
 
+The active Q&A and sampling policies use YAML. The same loaders accept existing
+JSON configuration files. Format changes preserve the validated policy and
+the stored decision snapshot hash. Changes to decision policy values require
+a new version. YAML policies use a single mapping with unique string keys and
+direct values. Quote version strings such as `'1'`.
+
 The composition root also exposes an offline workflow that loads a strict JSON
 policy, evaluates a supplied response and saves a decision before returning it:
 
@@ -72,7 +78,7 @@ from app.infrastructure.sqlite_assessment_repository import SqliteAssessmentRepo
 Path("local").mkdir(exist_ok=True)
 database = Path("local/assessments.sqlite3")
 assessor = create_qa_assessor(
-    Path("policies/search-qa-review.draft-1.json"), database
+    Path("policies/search-qa-review.draft-1.yaml"), database
 )
 record = assessor.execute({"status": "error", "qa_pairs": []})
 assert SqliteAssessmentRepository(database).get(record.assessment_id) == record

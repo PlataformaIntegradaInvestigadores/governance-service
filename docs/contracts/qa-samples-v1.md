@@ -11,7 +11,7 @@ creation and retrieval. Responses carry `Cache-Control: no-store`.
 - `GET /api/v1/qa-samples/{sample_id}` returns the saved snapshot. It returns
   404 for an unknown sample ID.
 
-Policy `qa-retrospective-sampling.v1.json` selects 10% rounded up with a
+Policy `qa-retrospective-sampling.v1.yaml` selects 10% rounded up with a
 minimum of 10. A smaller population returns 409
 (`INSUFFICIENT_QA_DELIVERIES`). Each assessment appears once. The algorithm
 orders IDs by SHA-256 of the decimal seed, a colon and the assessment ID,

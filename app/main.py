@@ -18,7 +18,7 @@ from app.infrastructure.admin_token_validator import (
     SearchAdminTokenValidator,
     create_admin_client,
 )
-from app.infrastructure.json_policy_repository import JsonPolicyRepository
+from app.infrastructure.json_policy_repository import PolicyFileRepository
 from app.infrastructure.qa_response import assess_qa_response, retain_qa_content
 from app.infrastructure.qa_upstream import QaUpstream
 from app.infrastructure.sqlite_assessment_repository import (
@@ -31,7 +31,7 @@ from app.infrastructure.sqlite_assessment_repository import (
 
 def create_qa_assessor(policy_path: Path, database_path: Path) -> RecordQaAssessment:
     return RecordQaAssessment(
-        JsonPolicyRepository(policy_path),
+        PolicyFileRepository(policy_path),
         SqliteAssessmentRepository(database_path),
         assess_qa_response,
         retain_qa_content,

@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 
 from app import __version__
 
@@ -23,10 +23,11 @@ def health() -> dict:
 
 
 @router.get("/status", tags=["Service"])
-def status() -> dict:
+def status(request: Request) -> dict:
+    enabled = request.app.state.qa_upstream is not None
     return {
         "service": "governance-service",
         "version": __version__,
-        "stage": "bootstrap",
-        "governance_enabled": False,
+        "stage": "governed-qa" if enabled else "bootstrap",
+        "governance_enabled": enabled,
     }

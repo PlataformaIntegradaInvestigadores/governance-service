@@ -12,6 +12,7 @@ class _PolicyDocument(BaseModel):
     policy_id: str
     version: str
     expected_pairs: int
+    allow_complete: bool = False
 
 
 def _unique_object(pairs: list[tuple[str, object]]) -> dict[str, object]:

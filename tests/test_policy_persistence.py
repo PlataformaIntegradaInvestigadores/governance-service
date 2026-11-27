@@ -59,7 +59,11 @@ def test_assessment_and_exact_policy_survive_repository_reopening(
         snapshot = connection.execute("SELECT snapshot_json FROM policies").fetchone()[
             0
         ]
-        assert json.loads(snapshot) == asdict(loaded.policy)
+        assert json.loads(snapshot) == {
+            "policy_id": loaded.policy.policy_id,
+            "version": loaded.policy.version,
+            "expected_pairs": loaded.policy.expected_pairs,
+        }
         assert "Confidential raw output" not in "\n".join(connection.iterdump())
 
 

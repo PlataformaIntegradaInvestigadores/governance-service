@@ -10,6 +10,7 @@ class GenerationStatus(StrEnum):
 
 
 class Verdict(StrEnum):
+    ALLOW = "allow"
     SUSPEND = "suspend"
     DENY = "deny"
 
@@ -19,12 +20,15 @@ class QaPolicy:
     policy_id: str
     version: str
     expected_pairs: int
+    allow_complete: bool = False
 
     def __post_init__(self) -> None:
         if not self.policy_id.strip() or not self.version.strip():
             raise ValueError("Policy identity and version must not be blank")
         if type(self.expected_pairs) is not int or self.expected_pairs < 1:
             raise ValueError("expected_pairs must be a positive integer")
+        if type(self.allow_complete) is not bool:
+            raise ValueError("allow_complete must be a boolean")
 
 
 @dataclass(frozen=True)

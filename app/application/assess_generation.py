@@ -26,5 +26,7 @@ def assess_generation(
             reasons += ("PARTIAL_GENERATION",)
         if not observation.sources_complete:
             reasons += ("SOURCE_EVIDENCE_INCOMPLETE",)
+        if policy.allow_complete and reasons == ("HUMAN_REVIEW_REQUIRED",):
+            verdict, reasons = Verdict.ALLOW, ("COMPLETE_GENERATION_ALLOWED",)
 
     return Assessment(verdict, policy.policy_id, policy.version, reasons)

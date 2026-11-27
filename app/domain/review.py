@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from app.domain.qa import RecordedAssessment, Verdict
+from app.domain.rag import RetainedRagContent
 
 
 class ReviewCaseIntegrityError(ValueError):
@@ -43,7 +44,7 @@ class ReviewCase:
     case_id: str
     assessment_id: str
     created_at: datetime
-    content: RetainedQaContent
+    content: RetainedQaContent | RetainedRagContent
 
 
 def require_review_case_link(

@@ -1,17 +1,26 @@
+from dataclasses import asdict
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Request, Response
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    field_validator,
+    model_validator,
+)
 
 from app.api.errors import SupervisionNotConfiguredError
 from app.api.supervisors import current_supervisor
 from app.application.resolve_review import ReviewCases
+from app.domain.rag import RetainedRagContent
 from app.domain.resolution import (
     MAX_JUSTIFICATION_LENGTH,
     ReviewOutcome,
     ReviewResolution,
 )
-from app.domain.review import RetainedQaPair
+from app.domain.review import RetainedQaContent, RetainedQaPair
 from app.domain.supervision import Supervisor
 
 router = APIRouter(prefix="/review-cases", tags=["Review cases"])
@@ -44,11 +53,21 @@ class ResolutionRequest(BaseModel):
         | None
     ) = None
     qa_pairs: list[_Pair] | None = Field(default=None, min_length=1, max_length=50)
+    answer_text: _Text | None = None
+
+    @field_validator("answer_text")
+    @classmethod
+    def validate_answer_encoding(cls, value: str | None) -> str | None:
+        if value is not None:
+            value.encode("utf-8")
+        return value
 
     @model_validator(mode="after")
-    def pairs_only_for_modify(self) -> "ResolutionRequest":
-        if (self.outcome == "modify") != (self.qa_pairs is not None):
-            raise ValueError("qa_pairs are required for modify and only for modify")
+    def content_only_for_modify(self) -> "ResolutionRequest":
+        supplied = sum(value is not None for value in (self.qa_pairs, self.answer_text))
+        expected = 1 if self.outcome == "modify" else 0
+        if supplied != expected:
+            raise ValueError("Modify requires exactly one correction")
         return self
 
 
@@ -81,6 +100,24 @@ def _resolution(resolution: ReviewResolution) -> dict:
     }
 
 
+def _review_content(case_content: RetainedRagContent | RetainedQaContent) -> dict:
+    if isinstance(case_content, RetainedRagContent):
+        cited, unresolved = case_content.citations()
+        return {
+            "rag": {
+                "query": case_content.query,
+                "answer_text": case_content.answer_text,
+                "blocks": [asdict(block) for block in case_content.blocks],
+                "cited_positions": list(cited),
+                "unresolved_positions": list(unresolved),
+            }
+        }
+    return {
+        "qa_pairs": [asdict(pair) for pair in case_content.qa_pairs],
+        "source_article_ids": list(case_content.source_article_ids),
+    }
+
+
 @router.get("/{case_id}", dependencies=[Depends(current_supervisor)])
 def view_case(case_id: str, reviews: _Reviews, response: Response) -> dict:
     view = reviews.view(case_id)
@@ -100,11 +137,7 @@ def view_case(case_id: str, reviews: _Reviews, response: Response) -> dict:
             "version": view.record.policy.version,
         },
         "reason_codes": list(view.record.assessment.reason_codes),
-        "qa_pairs": [
-            {"question": pair.question, "answer": pair.answer}
-            for pair in view.case.content.qa_pairs
-        ],
-        "source_article_ids": list(view.case.content.source_article_ids),
+        **_review_content(view.case.content),
         "resolution": (
             _resolution(view.resolution) if view.resolution is not None else None
         ),
@@ -125,7 +158,12 @@ def resolve_case(
         else None
     )
     result = reviews.resolve(
-        case_id, admin, ReviewOutcome(body.outcome), body.justification, pairs
+        case_id,
+        admin,
+        ReviewOutcome(body.outcome),
+        body.justification,
+        pairs,
+        modified_rag_answer=body.answer_text,
     )
     response.status_code = 201 if result.created else 200
     response.headers.update(_NO_STORE)

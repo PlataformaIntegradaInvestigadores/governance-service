@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
 
+from app.domain.rag import CITATION_WITHOUT_BLOCK, CITATIONS_MISSING, RetainedRagContent
 from app.domain.review import RetainedQaContent
 from app.domain.supervision import Supervisor
 
@@ -16,7 +17,14 @@ class ReviewOutcome(StrEnum):
 RELEASING_OUTCOMES = frozenset({ReviewOutcome.APPROVE, ReviewOutcome.MODIFY})
 # Reason codes that flag a defect; approving output that carries one overrides
 # the evaluator and therefore needs a justification.
-RISK_REASON_CODES = frozenset({"PARTIAL_GENERATION", "SOURCE_EVIDENCE_INCOMPLETE"})
+RISK_REASON_CODES = frozenset(
+    {
+        "PARTIAL_GENERATION",
+        "SOURCE_EVIDENCE_INCOMPLETE",
+        CITATION_WITHOUT_BLOCK,
+        CITATIONS_MISSING,
+    }
+)
 MAX_JUSTIFICATION_LENGTH = 2000
 
 
@@ -33,6 +41,10 @@ class ReviewCaseAlreadyResolvedError(Exception):
 
 
 class JustificationRequiredError(ValueError):
+    pass
+
+
+class InvalidReviewModificationError(ValueError):
     pass
 
 
@@ -61,7 +73,7 @@ class ReviewResolution:
     expires_at: datetime
     supervisor: Supervisor | None
     justification: str | None = field(default=None, repr=False)
-    modified_content: RetainedQaContent | None = None
+    modified_content: RetainedQaContent | RetainedRagContent | None = None
 
     def __post_init__(self) -> None:
         if self.resolved_at.utcoffset() is None or self.expires_at.utcoffset() is None:

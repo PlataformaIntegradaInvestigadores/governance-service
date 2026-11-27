@@ -1,9 +1,8 @@
-import json
-
 import httpx
 
+from app.infrastructure.generation_response import read_generation_response
+
 _PATH = "/api-se/v1/llm-search/generate-qa/"
-_MAX_RESPONSE_BYTES = 1024 * 1024
 
 
 class QaUpstream:
@@ -25,15 +24,7 @@ class QaUpstream:
             ):
                 if response.status_code != 200:
                     return {"status": "error", "qa_pairs": []}
-                body = bytearray()
-                for chunk in response.iter_bytes(chunk_size=64 * 1024):
-                    if len(body) + len(chunk) > _MAX_RESPONSE_BYTES:
-                        return None
-                    body.extend(chunk)
-            parsed = json.loads(body.decode("utf-8"))
-            # Reject non-finite numbers and escaped unpaired surrogates.
-            json.dumps(parsed, ensure_ascii=False, allow_nan=False).encode("utf-8")
-            return parsed
+                return read_generation_response(response)
         except httpx.HTTPError:
             return {"status": "error", "qa_pairs": []}
         except (ValueError, RecursionError):

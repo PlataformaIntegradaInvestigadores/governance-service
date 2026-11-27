@@ -4,12 +4,14 @@ from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from app.domain.qa import RecordedAssessment
+from app.domain.rag import RetainedRagContent
 from app.domain.repositories import (
     AssessmentRepository,
     ReviewCaseRepository,
     ReviewResolutionRepository,
 )
 from app.domain.resolution import (
+    InvalidReviewModificationError,
     JustificationRequiredError,
     ReviewCaseAlreadyResolvedError,
     ReviewCaseExpiredError,
@@ -86,15 +88,13 @@ class ReviewCases:
         outcome: ReviewOutcome,
         justification: str | None = None,
         modified_pairs: tuple[RetainedQaPair, ...] | None = None,
+        *,
+        modified_rag_answer: str | None = None,
     ) -> ResolutionResult:
         if outcome is ReviewOutcome.EXPIRED:
             raise ValueError("Expiry is recorded by the service, not a supervisor")
         case = self._case(case_id)
-        content = (
-            RetainedQaContent(modified_pairs, case.content.source_article_ids)
-            if modified_pairs is not None
-            else None
-        )
+        content = self._modify(case, modified_pairs, modified_rag_answer)
         requested = ReviewResolution(
             str(uuid4()),
             case_id,
@@ -119,6 +119,21 @@ class ReviewCases:
         except ReviewCaseAlreadyResolvedError:
             return self._replay(self._resolutions.get(case_id), requested)
         return ResolutionResult(requested, created=True)
+
+    @staticmethod
+    def _modify(
+        case: ReviewCase,
+        pairs: tuple[RetainedQaPair, ...] | None,
+        rag_answer: str | None,
+    ) -> RetainedQaContent | RetainedRagContent | None:
+        if pairs is None and rag_answer is None:
+            return None
+        if isinstance(case.content, RetainedRagContent):
+            if pairs is None and rag_answer is not None:
+                return case.content.correct(rag_answer)
+        elif pairs is not None and rag_answer is None:
+            return RetainedQaContent(pairs, case.content.source_article_ids)
+        raise InvalidReviewModificationError("Modification must match the case kind")
 
     def expire_overdue(self) -> int:
         """Record an expiry for every pending case whose window has closed."""

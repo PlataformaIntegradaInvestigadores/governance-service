@@ -7,7 +7,7 @@ from fastapi import FastAPI, Request, Response
 from fastapi.openapi.utils import get_openapi
 
 from app import __version__
-from app.api import governed_qa, qa_samples, review_cases, supervisors
+from app.api import governed_qa, governed_rag, qa_samples, review_cases, supervisors
 from app.api.errors import register_error_handlers
 from app.api.routes import health_router, router
 from app.application.record_qa_assessment import RecordQaAssessment
@@ -58,7 +58,11 @@ def create_review_cases(settings: Settings) -> ReviewCases | None:
     )
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+def create_app(
+    settings: Settings | None = None,
+    *,
+    rag: governed_rag.RagRouteDependencies | None = None,
+) -> FastAPI:
     settings = settings if settings is not None else Settings()
     application = FastAPI(
         title="Centinela Governance Service",
@@ -66,6 +70,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         version=__version__,
     )
     application.state.settings = settings
+    application.state.rag = rag
     application.state.authorize_supervisor = create_supervisor_authorizer(settings)
     application.state.review_cases = create_review_cases(settings)
     application.state.qa_upstream = None
@@ -89,6 +94,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(supervisors.router, prefix="/api/v1")
     application.include_router(review_cases.router, prefix="/api/v1")
     application.include_router(governed_qa.router, prefix="/api/v1")
+    application.include_router(governed_rag.router, prefix="/api/v1")
     application.include_router(qa_samples.router, prefix="/api/v1")
     register_error_handlers(application)
 

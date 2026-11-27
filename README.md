@@ -28,6 +28,15 @@ directly. Upstream failures and invalid responses return 403. See the
 [Q&A contract](docs/contracts/search-generate-qa.v1.md) and
 [ADR 0004](docs/adr/0004-governed-qa-policy-enforcement.md).
 
+## Governed RAG
+
+The [RAG contract](docs/contracts/rag-ask.v1.md) defines the requester and
+administrator routes. The application tests exercise policy decisions, a
+protected review and corrected release through the persistence ports. Runtime
+configuration awaits storage support for the RAG policy and protected case.
+The default application denies `/api/v1/governed/rag/ask` until a complete RAG
+configuration is available.
+
 ## Local Q&A assessment
 
 `app.infrastructure.qa_response.assess_qa_response` validates a supplied
